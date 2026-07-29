@@ -76,7 +76,6 @@ def init_db():
         )
     ''')
     
-    # Eski gider tablosunda dekont_yolu kolonu yoksa ekleyelim
     cursor.execute("PRAGMA table_info(giderler)")
     gider_cols = [col[1] for col in cursor.fetchall()]
     if "dekont_yolu" not in gider_cols:
@@ -193,10 +192,12 @@ if yonetici_giris_yapildi:
         "⚙️ Daire & Muafiyet Ayarları"
     ]
 else:
-    st.sidebar.info("Kat maliki görünümündesiniz. Sadece kendi daire borcunuzu inceleyebilirsiniz.")
+    st.sidebar.info("Kat maliki görünümündesiniz.")
+    # Kat maliklerinin görebileceği menüye Dashboard da eklendi!
     menu = [
         "🏠 Daire Hesap Özeti (Sakin Ekranı)",
-        "💸 Gider Ekle & Dekont Takibi"  # Kat malikleri harcamaları ve dekontları şeffafça görebilsin diye eklendi
+        "📊 Dashboard / Kasa", 
+        "💸 Gider Ekle & Dekont Takibi"
     ]
 
 secim = st.sidebar.selectbox("Navigasyon", menu)
@@ -260,9 +261,10 @@ if secim == "🏠 Daire Hesap Özeti (Sakin Ekranı)":
             else:
                 st.info("Bu daireye ait geçmiş ödeme kaydı bulunmuyor.")
 
-# --- 2. DASHBOARD / KASA ---
-elif secim == "📊 Dashboard / Kasa" and yonetici_giris_yapildi:
-    st.header("Kasa ve Genel Durum")
+# --- 2. DASHBOARD / KASA (HERKES GÖREBİLİR) ---
+elif secim == "📊 Dashboard / Kasa":
+    st.header("🏢 Kasa ve Genel Site Durumu")
+    st.caption("Sitenin güncel kasa durumunu, toplam gelir-gider dengesini ve bekleyen alacakları şeffaf bir şekilde inceleyebilirsiniz.")
     
     conn = get_db_connection()
     toplam_gelir = conn.execute("SELECT SUM(tutar) FROM tahsilat").fetchone()[0] or 0.0
@@ -515,7 +517,7 @@ elif secim == "💧 Su Faturası Girişi" and yonetici_giris_yapildi:
         conn.close()
         st.success(f"Hesaplama tamamlandı! {toplam_eklenen} daire için su borçlandırması yapıldı.")
 
-# --- 5. GİDER EKLE & DEKONT TAKİBİ (YÖNETİCİ & SAKİN ORTAK) ---
+# --- 5. GİDER EKLE & DEKONT TAKİBİ ---
 elif secim == "💸 Gider Ekle & Dekont Takibi":
     st.header("💸 Yönetim Giderleri ve Fatura/Dekont Arşivi")
     st.caption("Yapılan tüm harcamaları, açıklamalarını ve harcamaya ait resmi dekont/faturaları buradan şeffaf bir şekilde inceleyebilirsiniz.")
@@ -546,7 +548,7 @@ elif secim == "💸 Gider Ekle & Dekont Takibi":
                              (kategori, tutar, datetime.now().strftime("%Y-%m-%d"), aciklama, dosya_yolu))
                 conn.commit()
                 conn.close()
-                st.success("Gider ve dekont başarıyla sisteme kaydedildi!")
+                st.success("Gider dan dekont başarıyla sisteme kaydedildi!")
                 st.rerun()
         st.markdown("---")
 
@@ -598,7 +600,7 @@ elif secim == "⚙️ Daire & Muafiyet Ayarları" and yonetici_giris_yapildi:
                 UPDATE daireler 
                 SET sakin_adi = ?, aidat_tutari = ?, aidat_muaf = ?, son_su_endeks = ?, bahce_orani = ? 
                 WHERE daire_kodu = ?
-            ''', (row["Sakin Adı"], float(row["Sabit Aidat (TL)"]), int(row["Aidattan Muaf Mı?"]), float(row["Son Su Endeksi"]), float(row["Bahçe Oranı"]), row["Daire"]))
+            ''', (row["Sakin Adı"], float(row["Sabit Aidat (TL)"]), int(row["Aidattan Muaf Mı?"]), float(row["Son Su Endeksi"]), float(row["Bahçe Orani"]), row["Daire"]))
         conn.commit()
         conn.close()
         st.success("Daire bilgileri güncellendi!")
