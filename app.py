@@ -41,7 +41,6 @@ def init_db():
         )
     ''')
     
-    # Migration: bahce_orani sütunu
     cursor.execute("PRAGMA table_info(daireler)")
     columns = [col[1] for col in cursor.fetchall()]
     if "bahce_orani" not in columns:
@@ -82,9 +81,8 @@ def init_db():
         )
     ''')
 
-    # Daire Verileri (Tam Liste, Aidat Tutarları ve Bahçe Oranları)
+    # Daire Verileri
     daire_verileri = [
-        # A Blok
         ("A-1", "EDA BÜYÜKYILDIRIM", 2620.0, 0, 0.05702),
         ("A-2", "FATMA CEYLAN", 2210.0, 0, 0.039439),
         ("A-3", "SEVİL BİNCAN", 2030.0, 0, 0.031403),
@@ -93,24 +91,20 @@ def init_db():
         ("A-6", "ÖZLEM ÖZDİLEK", 1300.0, 0, 0.0),
         ("A-7", "ORHUN SEZGİN", 1300.0, 0, 0.0),
         ("A-8", "SALİH ERGONDU", 1300.0, 0, 0.0),
-        # B Blok
         ("B-1", "EGE OĞUZ", 3790.0, 0, 0.0),
         ("B-2", "ESRA KOÇ-MURAT GÜRKAN KINA", 3520.0, 0, 0.0),
         ("B-3", "YİĞİT ATİLAY", 3370.0, 0, 0.0),
         ("B-4", "EMİN GENÇPINAR", 3710.0, 0, 0.0),
-        # C Blok
         ("C-1", "NİHAT KARABULUT", 3700.0, 0, 0.0),
         ("C-2", "NİHAT KARABULUT", 3370.0, 0, 0.0),
         ("C-3", "EGE DOĞAN DURMUŞ", 3560.0, 0, 0.0),
         ("C-4", "ERSİN ALTIN", 3860.0, 0, 0.0),
-        # D Blok
         ("D-1", "GÜLİSTAN COŞKUN", 2680.0, 0, 0.0),
         ("D-2", "TEVFİK TAMER GÜRDEREOĞLU", 2610.0, 0, 0.0),
         ("D-3", "BANU AYTAÇER", 2290.0, 0, 0.0),
         ("D-4", "ASİME DAĞ", 1300.0, 0, 0.0),
         ("D-5", "?", 1300.0, 0, 0.0),
         ("D-6", "İBRAHİM CERİT", 1300.0, 0, 0.0),
-        # E Blok
         ("E-1", "MURAT YAMAN", 2650.0, 0, 0.0),
         ("E-2", "MERT RECEP SAYGIN", 2230.0, 0, 0.0),
         ("E-3", "CEREN - EZGİ ŞİMŞİR", 1920.0, 0, 0.0),
@@ -119,7 +113,6 @@ def init_db():
         ("E-6", "HAKAN NURHAN", 1300.0, 0, 0.0),
         ("E-7", "SERDAL YAZĞAN", 1300.0, 0, 0.0),
         ("E-8", "HURİYE FIRTINA", 1300.0, 0, 0.0),
-        # F Blok
         ("F-1", "BAHADIR DİNÇER", 1930.0, 0, 0.0),
         ("F-2", "MUKADDER AYHAN", 1900.0, 0, 0.0),
         ("F-3", "MEHMET BAŞEĞMEZ", 2040.0, 0, 0.0),
@@ -128,7 +121,6 @@ def init_db():
         ("F-6", "HAMİYET YONGA", 1300.0, 0, 0.0),
         ("F-7", "EMEL TURAN", 1300.0, 0, 0.0),
         ("F-8", "NURTAÇ GÜLTEN", 1300.0, 0, 0.0),
-        # G Blok (Aidattan Muaf)
         ("G-1", "BETÜL ALTIOK", 0.0, 1, 0.0),
         ("G-2", "ECE TEKTEKİN", 0.0, 1, 0.0),
         ("G-3", "CEM ÜNSAL", 0.0, 1, 0.0),
@@ -143,7 +135,7 @@ def init_db():
                 VALUES (?, ?, ?, ?, 0.0, ?)
             ''', (kod, isim, aidat, muaf, boran))
 
-    # Eski Borçlar (Görselden Aktarılan Temmuz 1 Öncesi Borçlar)
+    # Eski Borçlar
     eski_borc_verileri = {
         "A-1": 0.0, "A-2": 0.0, "A-3": 17444.66, "A-4": 0.0, "A-5": 15750.00, "A-6": 5250.00, "A-7": 15665.46, "A-8": 15748.43,
         "B-1": 0.0, "B-2": 0.0, "B-3": 0.0, "B-4": 0.0,
@@ -154,7 +146,6 @@ def init_db():
         "G-1": 0.0, "G-2": 0.0, "G-3": 0.0, "G-4": 0.0
     }
 
-    # Eğer 'Eski Borç' türünde borç hiç eklenmemişse tabloya ekle
     cursor.execute("SELECT COUNT(*) FROM borclar WHERE tur = 'Eski Borç'")
     if cursor.fetchone()[0] == 0:
         for daire, tutar in eski_borc_verileri.items():
@@ -169,23 +160,94 @@ init_db()
 # Application Title
 st.title("🏢 Manolya Trend Site Yönetim Paneli")
 
-# Sidebar Menu
-menu = [
-    "📊 Dashboard / Kasa", 
-    "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)", 
-    "💧 Su Faturası Girişi", 
-    "💸 Gider Ekle/Takip", 
-    "🏠 Daire Hesap Özeti (Micro Site)", 
-    "⚙️ Daire & Muafiyet Ayarları"
-]
-secim = st.sidebar.selectbox("Menü", menu)
-
 # Aktif dönemi Türkçe hazırlama
 ing_simdiki_ay = datetime.now().strftime("%B %Y")
 simdiki_donem_tr = turkce_donem_adi(ing_simdiki_ay)
 
-# --- 1. DASHBOARD / KASA ---
-if secim == "📊 Dashboard / Kasa":
+# --- SIDEBAR: YÖNETİCİ GİRİŞİ & MENÜ ---
+st.sidebar.markdown("### 🔐 Yönetici Girişi")
+yonetici_sifresi = st.sidebar.text_input("Yönetici Şifresi", type="password")
+yonetici_giris_yapildi = (yonetici_sifresi == "270994")  # Şifreyi buradan değiştirebilirsiniz
+
+if yonetici_giris_yapildi:
+    st.sidebar.success("Yönetici Girişi Başarılı ✅")
+    menu = [
+        "🏠 Daire Hesap Özeti (Sakin Ekranı)",
+        "📊 Dashboard / Kasa", 
+        "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)", 
+        "💧 Su Faturası Girişi", 
+        "💸 Gider Ekle/Takip", 
+        "⚙️ Daire & Muafiyet Ayarları"
+    ]
+else:
+    st.sidebar.info("Kat maliki görünümündesiniz. Sadece kendi daire borcunuzu inceleyebilirsiniz.")
+    menu = [
+        "🏠 Daire Hesap Özeti (Sakin Ekranı)"
+    ]
+
+secim = st.sidebar.selectbox("Navigasyon", menu)
+
+# --- 1. DAİRE HESAP ÖZETİ (SAKİN VE YÖNETİCİ ORTAK EKRANI) ---
+if secim == "🏠 Daire Hesap Özeti (Sakin Ekranı)":
+    st.header("🏠 Daire Borç ve Hesap Özeti")
+    st.caption("Kat malikleri bu ekrandan kendi dairelerini seçerek güncel borç durumlarını ve geçmiş ödemelerini inceleyebilirler.")
+    
+    conn = get_db_connection()
+    daire_listesi = conn.execute("SELECT daire_kodu, sakin_adi FROM daireler ORDER BY daire_kodu ASC").fetchall()
+    conn.close()
+    
+    secilen_daire = st.selectbox(
+        "Lütfen Dairenizi Seçin", 
+        options=[d["daire_kodu"] for d in daire_listesi],
+        format_func=lambda x: f"{x} - {[d['sakin_adi'] for d in daire_listesi if d['daire_kodu'] == x][0]}"
+    )
+    
+    if secilen_daire:
+        conn = get_db_connection()
+        d_info = conn.execute("SELECT * FROM daireler WHERE daire_kodu = ?", (secilen_daire,)).fetchone()
+        
+        borclar_df = pd.read_sql_query('''
+            SELECT donem AS 'Dönem', tur AS 'Borç Türü', tutar AS 'Tutar (TL)', 
+            CASE WHEN odendi = 1 THEN 'Ödendi ✅' ELSE 'Ödenmedi ❌' END AS 'Durum'
+            FROM borclar WHERE daire_kodu = ? ORDER BY id DESC
+        ''', conn, params=(secilen_daire,))
+        
+        tahsilat_df = pd.read_sql_query('''
+            SELECT tarih AS 'Ödeme Tarihi', tur AS 'Ödeme Türü', tutar AS 'Ödenen Tutar (TL)', aciklama AS 'Açıklama'
+            FROM tahsilat WHERE daire_kodu = ? ORDER BY id DESC
+        ''', conn, params=(secilen_daire,))
+        
+        kalan_borc = conn.execute("SELECT SUM(tutar) FROM borclar WHERE daire_kodu = ? AND odendi = 0", (secilen_daire,)).fetchone()[0] or 0.0
+        toplam_odenen = conn.execute("SELECT SUM(tutar) FROM tahsilat WHERE daire_kodu = ?", (secilen_daire,)).fetchone()[0] or 0.0
+        conn.close()
+        
+        st.markdown(f"### Daire: **{secilen_daire}** | Malik/Sakin: **{d_info['sakin_adi']}**")
+        
+        m1, m2, m3 = st.columns(3)
+        m1.metric("📌 Sabit Aidat Tutarı", f"{d_info['aidat_tutari']:,.2f} TL" if not d_info['aidat_muaf'] else "Muaf (G Blok)")
+        m2.metric("⚠️ Güncel Kalan Borç", f"{kalan_borc:,.2f} TL")
+        m3.metric("✅ Yapılan Toplam Ödeme", f"{toplam_odenen:,.2f} TL")
+        
+        st.markdown("---")
+        c1, c2 = st.columns(2)
+        
+        with c1:
+            st.subheader("📅 Ay Ay Kalem Kalem Borç Durumu")
+            if not borclar_df.empty:
+                borclar_df['Dönem'] = borclar_df['Dönem'].apply(lambda x: turkce_donem_adi(str(x)))
+                st.dataframe(borclar_df, use_container_width=True)
+            else:
+                st.info("Bu daireye ait borç kaydı bulunmuyor.")
+                
+        with c2:
+            st.subheader("💰 Yapılan Geçmiş Ödemeler")
+            if not tahsilat_df.empty:
+                st.dataframe(tahsilat_df, use_container_width=True)
+            else:
+                st.info("Bu daireye ait geçmiş ödeme kaydı bulunmuyor.")
+
+# --- 2. DASHBOARD / KASA (YÖNETİCİ ÖZEL) ---
+elif secim == "📊 Dashboard / Kasa" and yonetici_giris_yapildi:
     st.header("Kasa ve Genel Durum")
     
     conn = get_db_connection()
@@ -220,8 +282,8 @@ if secim == "📊 Dashboard / Kasa":
     else:
         st.success("Tüm borçlar ödenmiş, harika!")
 
-# --- 2. TAHSİLAT YÖNETİMİ (AİDAT / SU / ESKİ BORÇ) ---
-elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)":
+# --- 3. TAHSİLAT YÖNETİMİ (YÖNETİCİ ÖZEL) ---
+elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_giris_yapildi:
     st.header("Tahsilat Yönetimi")
     
     tab1, tab2, tab3, tab4 = st.tabs(["📌 Toplu Aidat Borçlandır", "💳 Aidat Tahsil Et", "💧 Su Tahsil Et", "📜 Eski Borç Tahsil Et"])
@@ -229,18 +291,16 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)":
     with tab1:
         st.subheader("Tüm Dairelere Özel Aidat Borcu Yansıt")
         donem = st.text_input("Dönem / Ay", value=simdiki_donem_tr)
-        st.caption("Not: 'Toplu Aidat Yansıt' butonuna bastığınızda G Blok hariç 38 daireye kendi özel aidat tutarı yansıtılacaktır.")
         
         if st.button("Toplu Aidat Yansıt"):
             conn = get_db_connection()
             daireler = conn.execute("SELECT daire_kodu, aidat_tutari FROM daireler WHERE aidat_muaf = 0").fetchall()
-            
             for d in daireler:
                 conn.execute("INSERT INTO borclar (daire_kodu, tur, tutar, donem, odendi) VALUES (?, 'Aidat', ?, ?, 0)",
                              (d['daire_kodu'], d['aidat_tutari'], donem))
             conn.commit()
             conn.close()
-            st.success(f"{len(daireler)} daireye özel aidat borçları başarıyla eklendi! (G Blok muaf tutuldu)")
+            st.success(f"{len(daireler)} daireye özel aidat borçları başarıyla eklendi!")
 
     with tab2:
         st.subheader("💳 Aidat Ödemesi Tahsil Et")
@@ -294,8 +354,6 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)":
                         conn.close()
                         st.success(f"Seçilen {len(secilenler)} adet aidat ödemesi kasaya işlendi!")
                         st.rerun()
-                    else:
-                        st.warning("Lütfen listeden en az bir daire seçin.")
         else:
             st.info("Ödenmemiş bekleyen aidat borcu bulunmuyor.")
 
@@ -351,8 +409,6 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)":
                         conn.close()
                         st.success(f"Seçilen {len(secilenler_su)} adet su ödemesi kasaya işlendi!")
                         st.rerun()
-                    else:
-                        st.warning("Lütfen listeden en az bir daire seçin.")
         else:
             st.info("Ödenmemiş bekleyen su borcu bulunmuyor.")
 
@@ -389,10 +445,9 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)":
         else:
             st.info("Ödenmemiş eski borç bulunmuyor.")
 
-# --- 3. SU FATURASI GİRİŞİ ---
-elif secim == "💧 Su Faturası Girişi":
-    st.header("💧 Su Faturası ve Bahçe Sulama Paylaşımı (42 Daire)")
-    st.info("Aşağıdaki tablodan **Yeni Endeks** sütununa çift tıklayarak değerleri güncelleyebilir veya Excel'deki endeks sütununu doğrudan bu tabloya kopyalayıp yapıştırabilirsiniz.")
+# --- 4. SU FATURASI GİRİŞİ (YÖNETİCİ ÖZEL) ---
+elif secim == "💧 Su Faturası Girişi" and yonetici_giris_yapildi:
+    st.header("💧 Su Faturası ve Bahçe Sulama Paylaşımı")
     
     col_f1, col_f2, col_f3 = st.columns(3)
     with col_f1:
@@ -411,15 +466,7 @@ elif secim == "💧 Su Faturası Girişi":
     ''', conn)
     conn.close()
     
-    st.markdown("### 📋 Toplu Endeks Giriş Tablosu")
-    
-    edited_su_df = st.data_editor(
-        df_su,
-        hide_index=True,
-        use_container_width=True,
-        disabled=["Daire", "Sakin Adı", "Önceki Endeks"],
-        key="su_grid_editor"
-    )
+    edited_su_df = st.data_editor(df_su, hide_index=True, use_container_width=True, disabled=["Daire", "Sakin Adı", "Önceki Endeks"])
     
     if st.button("Değişiklikleri Kaydet ve Su Borçlarını Hesapla"):
         birim_fiyat = toplam_fatura_tutari / toplam_ana_sayac_tuketimi if toplam_ana_sayac_tuketimi > 0 else 0.0
@@ -427,7 +474,6 @@ elif secim == "💧 Su Faturası Girişi":
         
         conn = get_db_connection()
         toplam_eklenen = 0
-        hata_var = False
         
         for idx, row in edited_su_df.iterrows():
             d_kodu = row["Daire"]
@@ -443,34 +489,27 @@ elif secim == "💧 Su Faturası Girişi":
                 m3_fark = yeni - onceki
                 tuketim_bedeli = m3_fark * birim_fiyat
                 bahce_sulama_payi = b_orani * toplam_bahce_bedeli
-                
                 toplam_tutar = tuketim_bedeli + bahce_sulama_payi
                 
                 if toplam_tutar > 0:
                     conn.execute("INSERT INTO borclar (daire_kodu, tur, tutar, donem, odendi) VALUES (?, 'Su', ?, ?, 0)",
                                  (d_kodu, toplam_tutar, donem_su))
                     toplam_eklenen += 1
-                
                 conn.execute("UPDATE daireler SET son_su_endeks = ? WHERE daire_kodu = ?", (yeni, d_kodu))
-            else:
-                hata_var = True
                 
         conn.commit()
         conn.close()
-        
-        if hata_var:
-            st.warning("Bazı dairelerde yeni endeks önceki endeksden küçük girildiği için o daireler hesaplama dışı bırakıldı.")
-        st.success(f"Hesaplama tamamlandı! Birim Fiyat: {birim_fiyat:.2f} TL/m3. {toplam_eklenen} daire için su borçlandırması yapıldı ve endeksler güncellendi.")
+        st.success(f"Hesaplama tamamlandı! {toplam_eklenen} daire için su borçlandırması yapıldı.")
 
-# --- 4. GİDER EKLE / TAKİP ---
-elif secim == "💸 Gider Ekle/Takip":
+# --- 5. GİDER EKLE / TAKİP (YÖNETİCİ ÖZEL) ---
+elif secim == "💸 Gider Ekle/Takip" and yonetici_giris_yapildi:
     st.header("Yönetim Giderleri Kaydı")
     
     col1, col2 = st.columns(2)
     with col1:
         kategori = st.selectbox("Gider Kategorisi", ["Asansör Bakımı", "Temizlik / Personel", "Ortak Elektrik", "Ortak Su", "Bahçe Bakımı", "Tamirat / Tadilat", "Diğer"])
         tutar = st.number_input("Gider Tutarı (TL)", min_value=0.0, step=100.0)
-        aciklama = st.text_area("Gider Açıklaması", placeholder="Örn: A Blok ampul değişimi")
+        aciklama = st.text_area("Gider Açıklaması")
         
         if st.button("Gider Kaydet"):
             conn = get_db_connection()
@@ -478,7 +517,7 @@ elif secim == "💸 Gider Ekle/Takip":
                          (kategori, tutar, datetime.now().strftime("%Y-%m-%d"), aciklama))
             conn.commit()
             conn.close()
-            st.success("Gider başarıyla kasadan düşüldü!")
+            st.success("Gider başarıyla kaydedildi!")
             st.rerun()
 
     with col2:
@@ -488,69 +527,9 @@ elif secim == "💸 Gider Ekle/Takip":
         conn.close()
         st.dataframe(giderler_df, use_container_width=True)
 
-# --- 5. DAİRE HESAP ÖZETİ (MİCRO SİTE) ---
-elif secim == "🏠 Daire Hesap Özeti (Micro Site)":
-    st.header("🏠 Daire Bazlı Micro Site / Hesap Özeti")
-    st.caption("İstediğiniz daireyi seçerek bu zamana kadar yapılmış tüm ödemeleri, ay ay kalem kalem borçları ve anlık bakiyeyi görüntüleyebilirsiniz.")
-    
-    conn = get_db_connection()
-    daire_listesi = conn.execute("SELECT daire_kodu, sakin_adi FROM daireler ORDER BY daire_kodu ASC").fetchall()
-    conn.close()
-    
-    secilen_daire = st.selectbox(
-        "İncelenecek Daireyi Seçin", 
-        options=[d["daire_kodu"] for d in daire_listesi],
-        format_func=lambda x: f"{x} - {[d['sakin_adi'] for d in daire_listesi if d['daire_kodu'] == x][0]}"
-    )
-    
-    if secilen_daire:
-        conn = get_db_connection()
-        d_info = conn.execute("SELECT * FROM daireler WHERE daire_kodu = ?", (secilen_daire,)).fetchone()
-        
-        borclar_df = pd.read_sql_query('''
-            SELECT donem AS 'Dönem', tur AS 'Borç Türü', tutar AS 'Tutar (TL)', 
-            CASE WHEN odendi = 1 THEN 'Ödendi ✅' ELSE 'Ödenmedi ❌' END AS 'Durum'
-            FROM borclar WHERE daire_kodu = ? ORDER BY id DESC
-        ''', conn, params=(secilen_daire,))
-        
-        tahsilat_df = pd.read_sql_query('''
-            SELECT tarih AS 'Ödeme Tarihi', tur AS 'Ödeme Türü', tutar AS 'Ödenen Tutar (TL)', aciklama AS 'Açıklama'
-            FROM tahsilat WHERE daire_kodu = ? ORDER BY id DESC
-        ''', conn, params=(secilen_daire,))
-        
-        kalan_borc = conn.execute("SELECT SUM(tutar) FROM borclar WHERE daire_kodu = ? AND odendi = 0", (secilen_daire,)).fetchone()[0] or 0.0
-        toplam_odenen = conn.execute("SELECT SUM(tutar) FROM tahsilat WHERE daire_kodu = ?", (secilen_daire,)).fetchone()[0] or 0.0
-        conn.close()
-        
-        st.markdown(f"### Daire: **{secilen_daire}** | Malik/Sakin: **{d_info['sakin_adi']}**")
-        
-        m1, m2, m3 = st.columns(3)
-        m1.metric("📌 Sabit Aidat Tutarı", f"{d_info['aidat_tutari']:,.2f} TL" if not d_info['aidat_muaf'] else "Muaf (G Blok)")
-        m2.metric("⚠️ Güncel Kalan Borç", f"{kalan_borc:,.2f} TL")
-        m3.metric("✅ Yapılan Toplam Ödeme", f"{toplam_odenen:,.2f} TL")
-        
-        st.markdown("---")
-        c1, c2 = st.columns(2)
-        
-        with c1:
-            st.subheader("📅 Ay Ay Kalem Kalem Borç Durumu")
-            if not borclar_df.empty:
-                borclar_df['Dönem'] = borclar_df['Dönem'].apply(lambda x: turkce_donem_adi(str(x)))
-                st.dataframe(borclar_df, use_container_width=True)
-            else:
-                st.info("Bu daireye ait borç kaydı bulunmuyor.")
-                
-        with c2:
-            st.subheader("💰 Yapılan Geçmiş Ödemeler")
-            if not tahsilat_df.empty:
-                st.dataframe(tahsilat_df, use_container_width=True)
-            else:
-                st.info("Bu daireye ait geçmiş ödeme kaydı bulunmuyor.")
-
-# --- 6. DAİRE & MUAFİYET AYARLARI ---
-elif secim == "⚙️ Daire & Muafiyet Ayarları":
+# --- 6. DAİRE & MUAFİYET AYARLARI (YÖNETİCİ ÖZEL) ---
+elif secim == "⚙️ Daire & Muafiyet Ayarları" and yonetici_giris_yapildi:
     st.header("Daire, Sakin Bilgileri ve Bahçe Oranları")
-    st.caption("Daire sakinlerinin isimlerini, aidat tutarlarını ve bahçe oranlarını buradan güncelleyebilirsiniz.")
     
     conn = get_db_connection()
     df_daireler = pd.read_sql_query('''
@@ -571,4 +550,4 @@ elif secim == "⚙️ Daire & Muafiyet Ayarları":
             ''', (row["Sakin Adı"], float(row["Sabit Aidat (TL)"]), int(row["Aidattan Muaf Mı?"]), float(row["Son Su Endeksi"]), float(row["Bahçe Oranı"]), row["Daire"]))
         conn.commit()
         conn.close()
-        st.success("Daire ve bahçe oranları bilgileri başarıyla güncellendi!")
+        st.success("Daire bilgileri güncellendi!")
