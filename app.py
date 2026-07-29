@@ -14,6 +14,15 @@ UPLOAD_FOLDER = "dekontlar"
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
+# Türkçe Para Formatı Yardımcı Fonksiyonu (1.250,50 ₺)
+def para_format(deger):
+    if deger is None:
+        deger = 0.0
+    # Önce standart 2 haneli stringe çevir, sonra TR formatına uyarla
+    tmp = f"{deger:,.2f}"
+    tmp = tmp.replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{tmp} ₺"
+
 # Türkçe Ay ve Tarih Sözlüğü için yardımcı fonksiyonlar
 TURKCE_AYLAR = {
     "January": "Ocak", "February": "Şubat", "March": "Mart", "April": "Nisan",
@@ -179,7 +188,7 @@ simdiki_donem_tr = turkce_donem_adi(ing_simdiki_ay)
 # --- SIDEBAR: YÖNETİCİ GİRİŞİ & MENÜ ---
 st.sidebar.markdown("### 🔐 Yönetici Girişi")
 yonetici_sifresi = st.sidebar.text_input("Yönetici Şifresi", type="password")
-yonetici_giris_yapildi = (yonetici_sifresi == "1234")  # Şifreyi buradan değiştirebilirsiniz
+yonetici_giris_yapildi = (yonetici_sifresi == "1234")
 
 if yonetici_giris_yapildi:
     st.sidebar.success("Yönetici Girişi Başarılı ✅")
@@ -193,7 +202,6 @@ if yonetici_giris_yapildi:
     ]
 else:
     st.sidebar.info("Kat maliki görünümündesiniz.")
-    # Kat maliklerinin görebileceği menüye Dashboard da eklendi!
     menu = [
         "🏠 Daire Hesap Özeti (Sakin Ekranı)",
         "📊 Dashboard / Kasa", 
@@ -222,13 +230,13 @@ if secim == "🏠 Daire Hesap Özeti (Sakin Ekranı)":
         d_info = conn.execute("SELECT * FROM daireler WHERE daire_kodu = ?", (secilen_daire,)).fetchone()
         
         borclar_df = pd.read_sql_query('''
-            SELECT donem AS 'Dönem', tur AS 'Borç Türü', tutar AS 'Tutar (TL)', 
+            SELECT donem AS 'Dönem', tur AS 'Borç Türü', tutar, 
             CASE WHEN odendi = 1 THEN 'Ödendi ✅' ELSE 'Ödenmedi ❌' END AS 'Durum'
             FROM borclar WHERE daire_kodu = ? ORDER BY id DESC
         ''', conn, params=(secilen_daire,))
         
         tahsilat_df = pd.read_sql_query('''
-            SELECT tarih AS 'Ödeme Tarihi', tur AS 'Ödeme Türü', tutar AS 'Ödenen Tutar (TL)', aciklama AS 'Açıklama'
+            SELECT tarih AS 'Ödeme Tarihi', tur AS 'Ödeme Türü', tutar, aciklama AS 'Açıklama'
             FROM tahsilat WHERE daire_kodu = ? ORDER BY id DESC
         ''', conn, params=(secilen_daire,))
         
@@ -236,12 +244,21 @@ if secim == "🏠 Daire Hesap Özeti (Sakin Ekranı)":
         toplam_odenen = conn.execute("SELECT SUM(tutar) FROM tahsilat WHERE daire_kodu = ?", (secilen_daire,)).fetchone()[0] or 0.0
         conn.close()
         
+        # Tablolardaki tutar sütunlarına TR formatı uygulama
+        if not borclar_df.empty:
+            borclar_df['Tutar (TL)'] = borclar_df['tutar'].apply(para_format)
+            borclar_df = borclar_df.drop(columns=['tutar'])
+            
+        if not tahsilat_df.empty:
+            tahsilat_df['Ödenen Tutar (TL)'] = tahsilat_df['tutar'].apply(para_format)
+            tahsilat_df = tahsilat_df.drop(columns=['tutar'])
+
         st.markdown(f"### Daire: **{secilen_daire}** | Malik/Sakin: **{d_info['sakin_adi']}**")
         
         m1, m2, m3 = st.columns(3)
-        m1.metric("📌 Sabit Aidat Tutarı", f"{d_info['aidat_tutari']:,.2f} TL" if not d_info['aidat_muaf'] else "Muaf (G Blok)")
-        m2.metric("⚠️ Güncel Kalan Borç", f"{kalan_borc:,.2f} TL")
-        m3.metric("✅ Yapılan Toplam Ödeme", f"{toplam_odenen:,.2f} TL")
+        m1.metric("📌 Sabit Aidat Tutarı", para_format(d_info['aidat_tutari']) if not d_info['aidat_muaf'] else "Muaf (G Blok)")
+        m2.metric("⚠️ Güncel Kalan Borç", para_format(kalan_borc))
+        m3.metric("✅ Yapılan Toplam Ödeme", para_format(toplam_odenen))
         
         st.markdown("---")
         c1, c2 = st.columns(2)
@@ -275,16 +292,16 @@ elif secim == "📊 Dashboard / Kasa":
     conn.close()
 
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("💰 Mevcut Kasa Bakiye", f"{kasa:,.2f} TL")
-    col2.metric("📈 Toplam Tahsilat", f"{toplam_gelir:,.2f} TL")
-    col3.metric("📉 Toplam Gider", f"{toplam_gider:,.2f} TL")
-    col4.metric("⚠️ Bekleyen Toplam Alacak", f"{toplam_alacak:,.2f} TL")
+    col1.metric("💰 Mevcut Kasa Bakiye", para_format(kasa))
+    col2.metric("📈 Toplam Tahsilat", para_format(toplam_gelir))
+    col3.metric("📉 Toplam Gider", para_format(toplam_gider))
+    col4.metric("⚠️ Bekleyen Toplam Alacak", para_format(toplam_alacak))
 
     st.markdown("---")
     st.subheader("📋 Ödenmeyen Borçlar Listesi (Eski Borç, Aidat ve Su)")
     conn = get_db_connection()
     bekleyen_df = pd.read_sql_query('''
-        SELECT b.daire_kodu AS 'Daire', d.sakin_adi AS 'Malik/Sakin', b.tur AS 'Borç Türü', b.tutar AS 'Tutar (TL)', b.donem AS 'Dönem' 
+        SELECT b.daire_kodu AS 'Daire', d.sakin_adi AS 'Malik/Sakin', b.tur AS 'Borç Türü', b.tutar, b.donem AS 'Dönem' 
         FROM borclar b
         LEFT JOIN daireler d ON b.daire_kodu = d.daire_kodu
         WHERE b.odendi = 0 
@@ -293,6 +310,8 @@ elif secim == "📊 Dashboard / Kasa":
     conn.close()
     
     if not bekleyen_df.empty:
+        bekleyen_df['Tutar (TL)'] = bekleyen_df['tutar'].apply(para_format)
+        bekleyen_df = bekleyen_df.drop(columns=['tutar'])
         bekleyen_df['Dönem'] = bekleyen_df['Dönem'].apply(lambda x: turkce_donem_adi(str(x)))
         st.dataframe(bekleyen_df, use_container_width=True)
     else:
@@ -324,7 +343,7 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
         
         conn = get_db_connection()
         aidat_borclari_df = pd.read_sql_query('''
-            SELECT b.id, b.daire_kodu AS 'Daire', d.sakin_adi AS 'Sakin Adı', b.tutar AS 'Tutar (TL)', b.donem AS 'Dönem'
+            SELECT b.id, b.daire_kodu AS 'Daire', d.sakin_adi AS 'Sakin Adı', b.tutar, b.donem AS 'Dönem'
             FROM borclar b
             LEFT JOIN daireler d ON b.daire_kodu = d.daire_kodu
             WHERE b.odendi = 0 AND b.tur = 'Aidat'
@@ -338,7 +357,7 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                 borc_secimi = st.selectbox(
                     "Ödeme Yapan Daire (Aidat)", 
                     options=aidat_borclari_df['id'], 
-                    format_func=lambda x: f"{aidat_borclari_df[aidat_borclari_df['id']==x]['Daire'].values[0]} ({aidat_borclari_df[aidat_borclari_df['id']==x]['Sakin Adı'].values[0]}) - {aidat_borclari_df[aidat_borclari_df['id']==x]['Dönem'].values[0]} - {aidat_borclari_df[aidat_borclari_df['id']==x]['Tutar (TL)'].values[0]} TL"
+                    format_func=lambda x: f"{aidat_borclari_df[aidat_borclari_df['id']==x]['Daire'].values[0]} ({aidat_borclari_df[aidat_borclari_df['id']==x]['Sakin Adı'].values[0]}) - {aidat_borclari_df[aidat_borclari_df['id']==x]['Dönem'].values[0]} - {para_format(aidat_borclari_df[aidat_borclari_df['id']==x]['tutar'].values[0])}"
                 )
                 aciklama_tek = st.text_input("Açıklama", value="EFT/Nakit Aidat Ödemesi", key="tek_aidat_ack")
                 
@@ -347,14 +366,16 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                     row = aidat_borclari_df[aidat_borclari_df['id'] == borc_secimi].iloc[0]
                     conn.execute("UPDATE borclar SET odendi = 1 WHERE id = ?", (borc_secimi,))
                     conn.execute("INSERT INTO tahsilat (daire_kodu, tur, tutar, tarih, aciklama) VALUES (?, 'Aidat', ?, ?, ?)",
-                                 (row['Daire'], row['Tutar (TL)'], datetime.now().strftime("%Y-%m-%d"), aciklama_tek))
+                                 (row['Daire'], row['tutar'], datetime.now().strftime("%Y-%m-%d"), aciklama_tek))
                     conn.commit()
                     conn.close()
                     st.success("Aidat tahsilatı başarıyla kasaya işlendi!")
                     st.rerun()
             else:
-                aidat_borclari_df.insert(0, "Seç", False)
-                edited_aidat = st.data_editor(aidat_borclari_df, hide_index=True, use_container_width=True, disabled=["id", "Daire", "Sakin Adı", "Tutar (TL)", "Dönem"])
+                aidat_borclari_df['Tutar (TL)'] = aidat_borclari_df['tutar'].apply(para_format)
+                display_aidat = aidat_borclari_df[['id', 'Daire', 'Sakin Adı', 'Tutar (TL)', 'Dönem']].copy()
+                display_aidat.insert(0, "Seç", False)
+                edited_aidat = st.data_editor(display_aidat, hide_index=True, use_container_width=True, disabled=["id", "Daire", "Sakin Adı", "Tutar (TL)", "Dönem"])
                 aciklama_toplu_aidat = st.text_input("Toplu Açıklama", value="Toplu Aidat Tahsilatı", key="toplu_aidat_ack")
                 
                 if st.button("Seçilen Aidatları Tahsil Et ve Kasaya Ekle"):
@@ -363,9 +384,10 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                         conn = get_db_connection()
                         bugun = datetime.now().strftime("%Y-%m-%d")
                         for idx, row in secilenler.iterrows():
+                            orijinal_tutar = aidat_borclari_df[aidat_borclari_df['id'] == row['id']]['tutar'].values[0]
                             conn.execute("UPDATE borclar SET odendi = 1 WHERE id = ?", (row["id"],))
                             conn.execute("INSERT INTO tahsilat (daire_kodu, tur, tutar, tarih, aciklama) VALUES (?, 'Aidat', ?, ?, ?)",
-                                         (row["Daire"], row["Tutar (TL)"], bugun, aciklama_toplu_aidat))
+                                         (row["Daire"], orijinal_tutar, bugun, aciklama_toplu_aidat))
                         conn.commit()
                         conn.close()
                         st.success(f"Seçilen {len(secilenler)} adet aidat ödemesi kasaya işlendi!")
@@ -379,7 +401,7 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
         
         conn = get_db_connection()
         su_borclari_df = pd.read_sql_query('''
-            SELECT b.id, b.daire_kodu AS 'Daire', d.sakin_adi AS 'Sakin Adı', b.tutar AS 'Tutar (TL)', b.donem AS 'Dönem'
+            SELECT b.id, b.daire_kodu AS 'Daire', d.sakin_adi AS 'Sakin Adı', b.tutar, b.donem AS 'Dönem'
             FROM borclar b
             LEFT JOIN daireler d ON b.daire_kodu = d.daire_kodu
             WHERE b.odendi = 0 AND b.tur = 'Su'
@@ -393,7 +415,7 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                 borc_secimi_su = st.selectbox(
                     "Ödeme Yapan Daire (Su)", 
                     options=su_borclari_df['id'], 
-                    format_func=lambda x: f"{su_borclari_df[su_borclari_df['id']==x]['Daire'].values[0]} ({su_borclari_df[su_borclari_df['id']==x]['Sakin Adı'].values[0]}) - {su_borclari_df[su_borclari_df['id']==x]['Dönem'].values[0]} - {su_borclari_df[su_borclari_df['id']==x]['Tutar (TL)'].values[0]} TL"
+                    format_func=lambda x: f"{su_borclari_df[su_borclari_df['id']==x]['Daire'].values[0]} ({su_borclari_df[su_borclari_df['id']==x]['Sakin Adı'].values[0]}) - {su_borclari_df[su_borclari_df['id']==x]['Dönem'].values[0]} - {para_format(su_borclari_df[su_borclari_df['id']==x]['tutar'].values[0])}"
                 )
                 aciklama_tek_su = st.text_input("Açıklama", value="EFT/Nakit Su Faturası Ödemesi", key="tek_su_ack")
                 
@@ -402,14 +424,16 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                     row = su_borclari_df[su_borclari_df['id'] == borc_secimi_su].iloc[0]
                     conn.execute("UPDATE borclar SET odendi = 1 WHERE id = ?", (borc_secimi_su,))
                     conn.execute("INSERT INTO tahsilat (daire_kodu, tur, tutar, tarih, aciklama) VALUES (?, 'Su', ?, ?, ?)",
-                                 (row['Daire'], row['Tutar (TL)'], datetime.now().strftime("%Y-%m-%d"), aciklama_tek_su))
+                                 (row['Daire'], row['tutar'], datetime.now().strftime("%Y-%m-%d"), aciklama_tek_su))
                     conn.commit()
                     conn.close()
                     st.success("Su tahsilatı başarıyla kasaya işlendi!")
                     st.rerun()
             else:
-                su_borclari_df.insert(0, "Seç", False)
-                edited_su_tahsil = st.data_editor(su_borclari_df, hide_index=True, use_container_width=True, disabled=["id", "Daire", "Sakin Adı", "Tutar (TL)", "Dönem"])
+                su_borclari_df['Tutar (TL)'] = su_borclari_df['tutar'].apply(para_format)
+                display_su = su_borclari_df[['id', 'Daire', 'Sakin Adı', 'Tutar (TL)', 'Dönem']].copy()
+                display_su.insert(0, "Seç", False)
+                edited_su_tahsil = st.data_editor(display_su, hide_index=True, use_container_width=True, disabled=["id", "Daire", "Sakin Adı", "Tutar (TL)", "Dönem"])
                 aciklama_toplu_su = st.text_input("Toplu Açıklama", value="Toplu Su Tahsilatı", key="toplu_su_ack")
                 
                 if st.button("Seçilen Su Borçlarını Tahsil Et ve Kasaya Ekle"):
@@ -418,9 +442,10 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                         conn = get_db_connection()
                         bugun = datetime.now().strftime("%Y-%m-%d")
                         for idx, row in secilenler_su.iterrows():
+                            orijinal_tutar = su_borclari_df[su_borclari_df['id'] == row['id']]['tutar'].values[0]
                             conn.execute("UPDATE borclar SET odendi = 1 WHERE id = ?", (row["id"],))
                             conn.execute("INSERT INTO tahsilat (daire_kodu, tur, tutar, tarih, aciklama) VALUES (?, 'Su', ?, ?, ?)",
-                                         (row["Daire"], row["Tutar (TL)"], bugun, aciklama_toplu_su))
+                                         (row["Daire"], orijinal_tutar, bugun, aciklama_toplu_su))
                         conn.commit()
                         conn.close()
                         st.success(f"Seçilen {len(secilenler_su)} adet su ödemesi kasaya işlendi!")
@@ -432,7 +457,7 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
         st.subheader("📜 Eski Borç (Devir) Tahsil Et")
         conn = get_db_connection()
         eski_borclar_df = pd.read_sql_query('''
-            SELECT b.id, b.daire_kodu AS 'Daire', d.sakin_adi AS 'Sakin Adı', b.tutar AS 'Tutar (TL)', b.donem AS 'Dönem'
+            SELECT b.id, b.daire_kodu AS 'Daire', d.sakin_adi AS 'Sakin Adı', b.tutar, b.donem AS 'Dönem'
             FROM borclar b
             LEFT JOIN daireler d ON b.daire_kodu = d.daire_kodu
             WHERE b.odendi = 0 AND b.tur = 'Eski Borç'
@@ -444,7 +469,7 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
             secilen_eski_borc = st.selectbox(
                 "Ödeme Yapan Daire (Eski Borç)", 
                 options=eski_borclar_df['id'], 
-                format_func=lambda x: f"{eski_borclar_df[eski_borclar_df['id']==x]['Daire'].values[0]} ({eski_borclar_df[eski_borclar_df['id']==x]['Sakin Adı'].values[0]}) - {eski_borclar_df[eski_borclar_df['id']==x]['Tutar (TL)'].values[0]} TL"
+                format_func=lambda x: f"{eski_borclar_df[eski_borclar_df['id']==x]['Daire'].values[0]} ({eski_borclar_df[eski_borclar_df['id']==x]['Sakin Adı'].values[0]}) - {para_format(eski_borclar_df[eski_borclar_df['id']==x]['tutar'].values[0])}"
             )
             aciklama_eski = st.text_input("Açıklama", value="Temmuz Öncesi Eski Borç Ödemesi", key="eski_ack")
             
@@ -453,7 +478,7 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                 row = eski_borclar_df[eski_borclar_df['id'] == secilen_eski_borc].iloc[0]
                 conn.execute("UPDATE borclar SET odendi = 1 WHERE id = ?", (secilen_eski_borc,))
                 conn.execute("INSERT INTO tahsilat (daire_kodu, tur, tutar, tarih, aciklama) VALUES (?, 'Eski Borç', ?, ?, ?)",
-                             (row['Daire'], row['Tutar (TL)'], datetime.now().strftime("%Y-%m-%d"), aciklama_eski))
+                             (row['Daire'], row['tutar'], datetime.now().strftime("%Y-%m-%d"), aciklama_eski))
                 conn.commit()
                 conn.close()
                 st.success("Eski borç tahsilatı başarıyla kasaya işlendi!")
@@ -548,7 +573,7 @@ elif secim == "💸 Gider Ekle & Dekont Takibi":
                              (kategori, tutar, datetime.now().strftime("%Y-%m-%d"), aciklama, dosya_yolu))
                 conn.commit()
                 conn.close()
-                st.success("Gider dan dekont başarıyla sisteme kaydedildi!")
+                st.success("Gider ve dekont başarıyla sisteme kaydedildi!")
                 st.rerun()
         st.markdown("---")
 
@@ -559,7 +584,8 @@ elif secim == "💸 Gider Ekle & Dekont Takibi":
     
     if giderler_listesi:
         for g in giderler_listesi:
-            with st.expander(f"📌 [{g['tarih']}] {g['kategori']} - **{g['tutar']:,.2f} TL**"):
+            formatted_gider_tutari = para_format(g['tutar'])
+            with st.expander(f"📌 [{g['tarih']}] {g['kategori']} - **{formatted_gider_tutari}**"):
                 st.write(f"**Açıklama:** {g['aciklama'] if g['aciklama'] else 'Açıklama girilmemiş.'}")
                 
                 if g['dekont_yolu'] and os.path.exists(g['dekont_yolu']):
@@ -600,7 +626,7 @@ elif secim == "⚙️ Daire & Muafiyet Ayarları" and yonetici_giris_yapildi:
                 UPDATE daireler 
                 SET sakin_adi = ?, aidat_tutari = ?, aidat_muaf = ?, son_su_endeks = ?, bahce_orani = ? 
                 WHERE daire_kodu = ?
-            ''', (row["Sakin Adı"], float(row["Sabit Aidat (TL)"]), int(row["Aidattan Muaf Mı?"]), float(row["Son Su Endeksi"]), float(row["Bahçe Orani"]), row["Daire"]))
+            ''', (row["Sakin Adı"], float(row["Sabit Aidat (TL)"]), int(row["Aidattan Muaf Mı?"]), float(row["Son Su Endeksi"]), float(row["Bahçe Oranı"]), row["Daire"]))
         conn.commit()
         conn.close()
         st.success("Daire bilgileri güncellendi!")
