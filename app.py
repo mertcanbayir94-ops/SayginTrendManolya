@@ -2,11 +2,17 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 from datetime import datetime
+import os
 
 # Page Configuration
 st.set_page_config(page_title="Manolya Trend Yönetimi", page_icon="🏢", layout="wide")
 
 DB_NAME = "manolya_site.db"
+UPLOAD_FOLDER = "dekontlar"
+
+# Dekontların kaydedileceği klasörü oluşturalım
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
 
 # Türkçe Ay ve Tarih Sözlüğü için yardımcı fonksiyonlar
 TURKCE_AYLAR = {
@@ -58,16 +64,23 @@ def init_db():
         )
     ''')
     
-    # 3. Giderler Tablosu
+    # 3. Giderler Tablosu (dekont_yolu sütunu eklendi)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS giderler (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             kategori TEXT,
             tutar REAL,
             tarih TEXT,
-            aciklama TEXT
+            aciklama TEXT,
+            dekont_yolu TEXT
         )
     ''')
+    
+    # Eski gider tablosunda dekont_yolu kolonu yoksa ekleyelim
+    cursor.execute("PRAGMA table_info(giderler)")
+    gider_cols = [col[1] for col in cursor.fetchall()]
+    if "dekont_yolu" not in gider_cols:
+        cursor.execute("ALTER TABLE giderler ADD COLUMN dekont_yolu TEXT")
 
     # 4. Daire Borçları Tablosu
     cursor.execute('''
@@ -167,7 +180,7 @@ simdiki_donem_tr = turkce_donem_adi(ing_simdiki_ay)
 # --- SIDEBAR: YÖNETİCİ GİRİŞİ & MENÜ ---
 st.sidebar.markdown("### 🔐 Yönetici Girişi")
 yonetici_sifresi = st.sidebar.text_input("Yönetici Şifresi", type="password")
-yonetici_giris_yapildi = (yonetici_sifresi == "270994")  # Şifreyi buradan değiştirebilirsiniz
+yonetici_giris_yapildi = (yonetici_sifresi == "1234")  # Şifreyi buradan değiştirebilirsiniz
 
 if yonetici_giris_yapildi:
     st.sidebar.success("Yönetici Girişi Başarılı ✅")
@@ -176,18 +189,19 @@ if yonetici_giris_yapildi:
         "📊 Dashboard / Kasa", 
         "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)", 
         "💧 Su Faturası Girişi", 
-        "💸 Gider Ekle/Takip", 
+        "💸 Gider Ekle & Dekont Takibi", 
         "⚙️ Daire & Muafiyet Ayarları"
     ]
 else:
     st.sidebar.info("Kat maliki görünümündesiniz. Sadece kendi daire borcunuzu inceleyebilirsiniz.")
     menu = [
-        "🏠 Daire Hesap Özeti (Sakin Ekranı)"
+        "🏠 Daire Hesap Özeti (Sakin Ekranı)",
+        "💸 Gider Ekle & Dekont Takibi"  # Kat malikleri harcamaları ve dekontları şeffafça görebilsin diye eklendi
     ]
 
 secim = st.sidebar.selectbox("Navigasyon", menu)
 
-# --- 1. DAİRE HESAP ÖZETİ (SAKİN VE YÖNETİCİ ORTAK EKRANI) ---
+# --- 1. DAİRE HESAP ÖZETİ ---
 if secim == "🏠 Daire Hesap Özeti (Sakin Ekranı)":
     st.header("🏠 Daire Borç ve Hesap Özeti")
     st.caption("Kat malikleri bu ekrandan kendi dairelerini seçerek güncel borç durumlarını ve geçmiş ödemelerini inceleyebilirler.")
@@ -246,7 +260,7 @@ if secim == "🏠 Daire Hesap Özeti (Sakin Ekranı)":
             else:
                 st.info("Bu daireye ait geçmiş ödeme kaydı bulunmuyor.")
 
-# --- 2. DASHBOARD / KASA (YÖNETİCİ ÖZEL) ---
+# --- 2. DASHBOARD / KASA ---
 elif secim == "📊 Dashboard / Kasa" and yonetici_giris_yapildi:
     st.header("Kasa ve Genel Durum")
     
@@ -282,7 +296,7 @@ elif secim == "📊 Dashboard / Kasa" and yonetici_giris_yapildi:
     else:
         st.success("Tüm borçlar ödenmiş, harika!")
 
-# --- 3. TAHSİLAT YÖNETİMİ (YÖNETİCİ ÖZEL) ---
+# --- 3. TAHSİLAT YÖNETİMİ ---
 elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_giris_yapildi:
     st.header("Tahsilat Yönetimi")
     
@@ -445,7 +459,7 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
         else:
             st.info("Ödenmemiş eski borç bulunmuyor.")
 
-# --- 4. SU FATURASI GİRİŞİ (YÖNETİCİ ÖZEL) ---
+# --- 4. SU FATURASI GİRİŞİ ---
 elif secim == "💧 Su Faturası Girişi" and yonetici_giris_yapildi:
     st.header("💧 Su Faturası ve Bahçe Sulama Paylaşımı")
     
@@ -501,33 +515,70 @@ elif secim == "💧 Su Faturası Girişi" and yonetici_giris_yapildi:
         conn.close()
         st.success(f"Hesaplama tamamlandı! {toplam_eklenen} daire için su borçlandırması yapıldı.")
 
-# --- 5. GİDER EKLE / TAKİP (YÖNETİCİ ÖZEL) ---
-elif secim == "💸 Gider Ekle/Takip" and yonetici_giris_yapildi:
-    st.header("Yönetim Giderleri Kaydı")
+# --- 5. GİDER EKLE & DEKONT TAKİBİ (YÖNETİCİ & SAKİN ORTAK) ---
+elif secim == "💸 Gider Ekle & Dekont Takibi":
+    st.header("💸 Yönetim Giderleri ve Fatura/Dekont Arşivi")
+    st.caption("Yapılan tüm harcamaları, açıklamalarını ve harcamaya ait resmi dekont/faturaları buradan şeffaf bir şekilde inceleyebilirsiniz.")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        kategori = st.selectbox("Gider Kategorisi", ["Asansör Bakımı", "Temizlik / Personel", "Ortak Elektrik", "Ortak Su", "Bahçe Bakımı", "Tamirat / Tadilat", "Diğer"])
-        tutar = st.number_input("Gider Tutarı (TL)", min_value=0.0, step=100.0)
-        aciklama = st.text_area("Gider Açıklaması")
-        
-        if st.button("Gider Kaydet"):
-            conn = get_db_connection()
-            conn.execute("INSERT INTO giderler (kategori, tutar, tarih, aciklama) VALUES (?, ?, ?, ?)",
-                         (kategori, tutar, datetime.now().strftime("%Y-%m-%d"), aciklama))
-            conn.commit()
-            conn.close()
-            st.success("Gider başarıyla kaydedildi!")
-            st.rerun()
+    if yonetici_giris_yapildi:
+        st.markdown("### ➕ Yeni Gider ve Dekont Ekle (Yönetici Paneli)")
+        with st.form("gider_formu", clear_on_submit=True):
+            cg1, cg2 = st.columns(2)
+            with cg1:
+                kategori = st.selectbox("Gider Kategorisi", ["Asansör Bakımı", "Temizlik / Personel", "Ortak Elektrik", "Ortak Su", "Bahçe Bakımı", "Tamirat / Tadilat", "Diğer"])
+                tutar = st.number_input("Gider Tutarı (TL)", min_value=0.0, step=100.0)
+            with cg2:
+                dekont_dosya = st.file_uploader("Dekont / Fatura Dosyası Yükle (Resim veya PDF)", type=["png", "jpg", "jpeg", "pdf"])
+            
+            aciklama = st.text_area("Gider Açıklaması / Detayı")
+            gider_kaydet_btn = st.form_submit_button("Gideri ve Dekontu Kaydet")
+            
+            if gider_kaydet_btn:
+                dosya_yolu = None
+                if dekont_dosya is not None:
+                    dosya_adi = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{dekont_dosya.name}"
+                    dosya_yolu = os.path.join(UPLOAD_FOLDER, dosya_adi)
+                    with open(dosya_yolu, "wb") as f:
+                        f.write(dekont_dosya.getbuffer())
+                
+                conn = get_db_connection()
+                conn.execute("INSERT INTO giderler (kategori, tutar, tarih, aciklama, dekont_yolu) VALUES (?, ?, ?, ?, ?)",
+                             (kategori, tutar, datetime.now().strftime("%Y-%m-%d"), aciklama, dosya_yolu))
+                conn.commit()
+                conn.close()
+                st.success("Gider ve dekont başarıyla sisteme kaydedildi!")
+                st.rerun()
+        st.markdown("---")
 
-    with col2:
-        st.subheader("Geçmiş Giderler")
-        conn = get_db_connection()
-        giderler_df = pd.read_sql_query("SELECT tarih AS 'Tarih', kategori AS 'Kategori', tutar AS 'Tutar (TL)', aciklama AS 'Açıklama' FROM giderler ORDER BY id DESC", conn)
-        conn.close()
-        st.dataframe(giderler_df, use_container_width=True)
+    st.subheader("📜 Yapılan Harcamalar Listesi ve Dekontlar")
+    conn = get_db_connection()
+    giderler_listesi = conn.execute("SELECT * FROM giderler ORDER BY id DESC").fetchall()
+    conn.close()
+    
+    if giderler_listesi:
+        for g in giderler_listesi:
+            with st.expander(f"📌 [{g['tarih']}] {g['kategori']} - **{g['tutar']:,.2f} TL**"):
+                st.write(f"**Açıklama:** {g['aciklama'] if g['aciklama'] else 'Açıklama girilmemiş.'}")
+                
+                if g['dekont_yolu'] and os.path.exists(g['dekont_yolu']):
+                    dosya_uzanti = g['dekont_yolu'].split('.')[-1].lower()
+                    if dosya_uzanti in ['png', 'jpg', 'jpeg']:
+                        st.image(g['dekont_yolu'], caption="İlgili Harcama Dekontu / Faturası", use_container_width=True)
+                    else:
+                        with open(g['dekont_yolu'], "rb") as f:
+                            st.download_button(
+                                label="📥 Dekontu / Faturayı İndir (PDF)",
+                                data=f,
+                                file_name=os.path.basename(g['dekont_yolu']),
+                                mime="application/pdf",
+                                key=f"pdf_down_{g['id']}"
+                            )
+                else:
+                    st.info("Bu harcama için yüklenmiş bir dekont/fatura bulunmuyor.")
+    else:
+        st.info("Henüz sisteme kaydedilmiş bir gider bulunmuyor.")
 
-# --- 6. DAİRE & MUAFİYET AYARLARI (YÖNETİCİ ÖZEL) ---
+# --- 6. DAİRE & MUAFİYET AYARLARI ---
 elif secim == "⚙️ Daire & Muafiyet Ayarları" and yonetici_giris_yapildi:
     st.header("Daire, Sakin Bilgileri ve Bahçe Oranları")
     
