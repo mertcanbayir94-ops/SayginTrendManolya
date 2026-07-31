@@ -94,25 +94,6 @@ def init_db():
                 {"daire_kodu": "G-4", "sakin_adi": "HAKAN BİRLİKER", "aidat_tutari": 0.0, "aidat_muaf": True, "son_su_endeks": 0.0, "bahce_orani": 0.0}
             ]
             supabase.table("daireler").upsert(daire_verileri).execute()
-
-        # Eski Borçlar Kontrolü
-        res_borc = supabase.table("borclar").select("*", count="exact").eq("tur", "Eski Borç").execute()
-        if res_borc.count == 0 or not res_borc.data:
-            eski_borc_verileri = {
-                "A-3": 17444.66, "A-5": 15750.00, "A-6": 5250.00, "A-7": 15665.46, "A-8": 15748.43,
-                "C-1": 36067.98, "C-2": 36198.43, "C-3": 19015.56, "D-4": 15750.00, "D-5": 16069.72,
-                "E-4": 739.67, "E-7": 8629.29, "E-8": 14000.00, "F-1": 10643.24, "F-2": 223.38,
-                "F-3": 7580.67, "F-4": 5248.70, "F-5": 17278.81, "F-6": 4800.00
-            }
-            kayitlar = []
-            for daire, tutar in eski_borc_verileri.items():
-                if tutar > 0:
-                    kayitlar.append({
-                        "daire_kodu": daire, "tur": "Eski Borç", "tutar": tutar, 
-                        "donem": "Temmuz 2026 Öncesi", "odendi": False
-                    })
-            if kayitlar:
-                supabase.table("borclar").insert(kayitlar).execute()
     except Exception as e:
         st.error(f"Veritabanı bağlantı hatası: {e}")
 
@@ -250,7 +231,7 @@ elif secim == "📊 Dashboard / Kasa":
 
 # --- 3. TAHSİLAT YÖNETİMİ ---
 elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_giris_yapildi:
-    st.header("Tahsilat Yönetimi")
+    st.header("💳 Tahsilat Yönetimi")
     tab1, tab2, tab3, tab4 = st.tabs(["📌 Toplu Aidat Borçlandır", "💳 Aidat Tahsil Et", "💧 Su Tahsil Et", "📜 Eski Borç Tahsil Et"])
     
     with tab1:
@@ -269,7 +250,7 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
             st.success(f"{len(daireler)} daireye özel aidat borçları başarıyla eklendi!")
 
     with tab2:
-        st.subheader("💳 Aidat Ödemesi Tahsil Et")
+        st.subheader("💳 Aidat Ödemesi Tahsil Et (Tekli & Toplu)")
         aidat_borclari = supabase.table("borclar").select("*").eq("odendi", False).eq("tur", "Aidat").order("daire_kodu").execute().data
         daireler_map = {d["daire_kodu"]: d["sakin_adi"] for d in supabase.table("daireler").select("daire_kodu, sakin_adi").execute().data}
         
@@ -279,7 +260,7 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                 sakin = daireler_map.get(b["daire_kodu"], "")
                 secenekler.append((b["id"], f"{b['daire_kodu']} ({sakin}) - {turkce_donem_adi(b['donem'])} - {para_format(b['tutar'])}"))
             
-            secilen_id = st.selectbox("Ödeme Yapan Daire (Aidat)", options=[s[0] for s in secenekler], format_func=lambda x: [s[1] for s in secenekler if s[0] == x][0])
+            secilen_id = st.selectbox("Ödeme Yapan Daire (Tekli Aidat)", options=[s[0] for s in secenekler], format_func=lambda x: [s[1] for s in secenekler if s[0] == x][0])
             aciklama_tek = st.text_input("Açıklama", value="EFT/Nakit Aidat Ödemesi")
             
             if st.button("Aidat Ödemesini Kasaya Kaydet"):
@@ -291,11 +272,33 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                 }).execute()
                 st.success("Aidat tahsilatı başarıyla kasaya işlendi!")
                 st.rerun()
+
+            st.markdown("---")
+            st.subheader("⚡ Toplu Aidat Tahsil Et (Birden Fazla Daire)")
+            secilen_coklu_aidat = st.multiselect("Tahsil Edilecek Aidat Borçları", options=[s[0] for s in secenekler], format_func=lambda x: [s[1] for s in secenekler if s[0] == x][0])
+            aciklama_toplu = st.text_input("Toplu Ödeme Açıklaması", value="Toplu Aidat Tahsilatı")
+            
+            if st.button("Seçilen Tüm Aidatları Tahsil Et ve Kasaya Ekle"):
+                if secilen_coklu_aidat:
+                    tahsilat_listesi = []
+                    for sid in secilen_coklu_aidat:
+                        b_item = [b for b in aidat_borclari if b["id"] == sid][0]
+                        supabase.table("borclar").update({"odendi": True}).eq("id", sid).execute()
+                        tahsilat_listesi.append({
+                            "daire_kodu": b_item["daire_kodu"], "tur": "Aidat", 
+                            "tutar": b_item["tutar"], "tarih": datetime.now().strftime("%Y-%m-%d"), "aciklama": aciklama_toplu
+                        })
+                    if tahsilat_listesi:
+                        supabase.table("tahsilat").insert(tahsilat_listesi).execute()
+                    st.success(f"Seçilen {len(secilen_coklu_aidat)} dairenin aidat ödemesi başarıyla kasaya işlendi!")
+                    st.rerun()
+                else:
+                    st.warning("Lütfen en az bir daire seçin.")
         else:
             st.info("Ödenmemiş bekleyen aidat borcu bulunmuyor.")
 
     with tab3:
-        st.subheader("💧 Su Ödemesi Tahsil Et")
+        st.subheader("💧 Su Ödemesi Tahsil Et (Tekli & Toplu)")
         su_borclari = supabase.table("borclar").select("*").eq("odendi", False).eq("tur", "Su").order("daire_kodu").execute().data
         daireler_map = {d["daire_kodu"]: d["sakin_adi"] for d in supabase.table("daireler").select("daire_kodu, sakin_adi").execute().data}
         
@@ -305,7 +308,7 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                 sakin = daireler_map.get(b["daire_kodu"], "")
                 secenekler_su.append((b["id"], f"{b['daire_kodu']} ({sakin}) - {turkce_donem_adi(b['donem'])} - {para_format(b['tutar'])}"))
             
-            secilen_id_su = st.selectbox("Ödeme Yapan Daire (Su)", options=[s[0] for s in secenekler_su], format_func=lambda x: [s[1] for s in secenekler_su if s[0] == x][0], key="su_sec")
+            secilen_id_su = st.selectbox("Ödeme Yapan Daire (Tekli Su)", options=[s[0] for s in secenekler_su], format_func=lambda x: [s[1] for s in secenekler_su if s[0] == x][0], key="su_sec")
             aciklama_tek_su = st.text_input("Açıklama", value="EFT/Nakit Su Ödemesi", key="su_ack")
             
             if st.button("Su Ödemesini Kasaya Kaydet"):
@@ -317,6 +320,28 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                 }).execute()
                 st.success("Su tahsilatı başarıyla kasaya işlendi!")
                 st.rerun()
+
+            st.markdown("---")
+            st.subheader("⚡ Toplu Su Tahsil Et (Birden Fazla Daire)")
+            secilen_coklu_su = st.multiselect("Tahsil Edilecek Su Borçları", options=[s[0] for s in secenekler_su], format_func=lambda x: [s[1] for s in secenekler_su if s[0] == x][0], key="su_coklu_sec")
+            aciklama_toplu_su = st.text_input("Toplu Su Ödeme Açıklaması", value="Toplu Su Tahsilatı", key="su_coklu_ack")
+            
+            if st.button("Seçilen Tüm Su Borçlarını Tahsil Et ve Kasaya Ekle"):
+                if secilen_coklu_su:
+                    tahsilat_listesi_su = []
+                    for sid in secilen_coklu_su:
+                        b_item = [b for b in su_borclari if b["id"] == sid][0]
+                        supabase.table("borclar").update({"odendi": True}).eq("id", sid).execute()
+                        tahsilat_listesi_su.append({
+                            "daire_kodu": b_item["daire_kodu"], "tur": "Su", 
+                            "tutar": b_item["tutar"], "tarih": datetime.now().strftime("%Y-%m-%d"), "aciklama": aciklama_toplu_su
+                        })
+                    if tahsilat_listesi_su:
+                        supabase.table("tahsilat").insert(tahsilat_listesi_su).execute()
+                    st.success(f"Seçilen {len(secilen_coklu_su)} dairenin su ödemesi başarıyla kasaya işlendi!")
+                    st.rerun()
+                else:
+                    st.warning("Lütfen en az bir daire seçin.")
         else:
             st.info("Ödenmemiş bekleyen su borcu bulunmuyor.")
 
