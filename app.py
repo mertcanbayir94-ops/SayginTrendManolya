@@ -385,12 +385,21 @@ elif secim == "💧 Su Faturası Girişi" and yonetici_giris_yapildi:
         
     donem_su = st.text_input("Su Faturası Dönemi", value=f"{simdiki_donem_tr} Su")
     
+    st.markdown("### Daire Su Sayaçları (Yeni Endeksleri Tablodan Giriniz)")
     daireler_data = supabase.table("daireler").select("daire_kodu, sakin_adi, son_su_endeks, bahce_orani").order("daire_kodu").execute().data
+    
     df_su = pd.DataFrame(daireler_data)
     df_su.columns = ['Daire', 'Sakin Adı', 'Önceki Endeks', 'Bahçe Oranı']
     df_su['Yeni Endeks'] = df_su['Önceki Endeks']
     
-    edited_su_df = st.data_editor(df_su[['Daire', 'Sakin Adı', 'Önceki Endeks', 'Yeni Endeks']], hide_index=True, use_container_width=True, disabled=["Daire", "Sakin Adı", "Önceki Endeks"])
+    # Tablo üzerinden doğrudan düzenlenebilir alan (İstediğiniz gibi tablodan seçim yapılıyor)
+    edited_su_df = st.data_editor(
+        df_su[['Daire', 'Sakin Adı', 'Önceki Endeks', 'Yeni Endeks']], 
+        hide_index=True, 
+        use_container_width=True, 
+        disabled=["Daire", "Sakin Adı", "Önceki Endeks"],
+        key="su_endeks_editor"
+    )
     
     if st.button("Değişiklikleri Kaydet ve Su Borçlarını Hesapla"):
         birim_fiyat = toplam_fatura_tutari / toplam_ana_sayac_tuketimi if toplam_ana_sayac_tuketimi > 0 else 0.0
@@ -456,7 +465,7 @@ elif secim == "💸 Gider Ekle & Dekont Takibi":
                     "kategori": kategori, "tutar": tutar, "tarih": datetime.now().strftime("%Y-%m-%d"), 
                     "aciklama": aciklama, "dekont_yolu": dosya_yolu
                 }).execute()
-                st.success("Gider ve dekont başarıyla sisteme kaydedildi!")
+                st.success("Gider dan dekont başarıyla sisteme kaydedildi!")
                 st.rerun()
         st.markdown("---")
 
@@ -492,7 +501,7 @@ elif secim == "⚙️ Daire & Muafiyet Ayarları" and yonetici_giris_yapildi:
     df_daireler = pd.DataFrame(daireler_data)
     df_daireler.columns = ['Daire', 'Sakin Adı', 'Sabit Aidat (TL)', 'Aidattan Muaf Mı?', 'Son Su Endeksi', 'Bahçe Oranı']
 
-    edited_daireler = st.data_editor(df_daireler, use_container_width=True)
+    edited_daireler = st.data_editor(df_daireler, use_container_width=True, key="daire_ayarlar_editor")
     
     if st.button("Bilgileri Güncelle"):
         for idx, row in edited_daireler.iterrows():
