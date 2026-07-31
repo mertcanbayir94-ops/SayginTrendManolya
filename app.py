@@ -413,7 +413,7 @@ elif secim == "💸 Gider Ekle & Dekont Takibi":
         with st.form("gider_formu", clear_on_submit=True):
             cg1, cg2 = st.columns(2)
             with cg1:
-                kategori = st.selectbox("Gider Kategorisi", ["Asansör Bakımı", "Temizlik / Personel", "Ortak Elektrik", "Ortak Su", "Bahçe Bakımı", "Tamirat / Tadilat", "Diğer"])
+                kategori = st.selectbox("Gider Kategorisi", ["Asansör Bakımı", "Temizlik / Personel", "Ortak Elektrik", "Ortak Su", "Bahçe Bakımı", "Havuz Bakımı", "Huzur Hakkı", "Tamirat / Tadilat", "Diğer"])
                 tutar = st.number_input("Gider Tutarı (TL)", min_value=0.0, step=100.0)
             with cg2:
                 dekont_dosya = st.file_uploader("Dekont / Fatura Dosyası Yükle (Resim veya PDF)", type=["png", "jpg", "jpeg", "pdf"])
