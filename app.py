@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
+import re
 from datetime import datetime
 from supabase import create_client, Client
 
@@ -41,6 +42,28 @@ def turkce_donem_adi(ingilizce_donem):
     for ing, tr in TURKCE_AYLAR.items():
         ingilizce_donem = str(ingilizce_donem).replace(ing, tr)
     return ingilizce_donem
+
+# Açıklama metninden daire kodunu ve borç türünü çıkaran akıllı fonksiyon
+def aciklama_analiz_et(aciklama):
+    if not isinstance(aciklama, str):
+        return None, "Aidat"
+    
+    aciklama_upper = aciklama.upper()
+    
+    # Daire kodunu bul (Örn: A-1, B3, C-4, G-2 vb.)
+    daire_match = re.search(r'\b([A-G])\s*[-]?\s*([1-8])\b', aciklama_upper)
+    daire_kodu = None
+    if daire_match:
+        daire_kodu = f"{daire_match.group(1)}-{daire_match.group(2)}"
+        
+    # Borç türünü tahmin et
+    borc_turu = "Aidat"
+    if "SU" in aciklama_upper:
+        borc_turu = "Su"
+    elif "ESKİ" in aciklama_upper or "GEÇMİŞ" in aciklama_upper:
+        borc_turu = "Eski Borç"
+        
+    return daire_kodu, borc_turu
 
 # İlk Kurulum / Tablo Kontrolü ve Varsayılan Veriler
 def init_db():
@@ -292,15 +315,13 @@ elif secim == "📊 Dashboard / Kasa":
 # --- 3. TAHSİLAT YÖNETİMİ ---
 elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_giris_yapildi:
     st.header("💳 Tahsilat Yönetimi")
-    tab1, tab2, tab3, tab4 = st.tabs(["📌 Toplu Aidat Borçlandır", "💳 Aidat Tahsil Et (Tablo)", "💧 Su Tahsil Et (Tablo)", "📜 Eski Borç Tahsil Et"])
-    
-    with tab1:
-        st.subheader("Tüm Dairelere Özel Aidat Borcu Yansıt")
-
-# --- 3. TAHSİLAT YÖNETİMİ ---
-elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_giris_yapildi:
-    st.header("💳 Tahsilat Yönetimi")
-    tab1, tab2, tab3, tab4 = st.tabs(["📌 Toplu Aidat Borçlandır", "💳 Aidat Tahsil Et (Tablo)", "💧 Su Tahsil Et (Tablo)", "📜 Eski Borç Tahsil Et"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "📌 Toplu Aidat Borçlandır", 
+        "💳 Aidat Tahsil Et (Tablo)", 
+        "💧 Su Tahsil Et (Tablo)", 
+        "📜 Eski Borç Tahsil Et",
+        "📂 Akbank Ekstresi İle Otomatik Tahsilat"
+    ])
     
     with tab1:
         st.subheader("Tüm Dairelere Özel Aidat Borcu Yansıt")
@@ -438,6 +459,126 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                 st.rerun()
         else:
             st.info("Ödenmemiş eski borç bulunmuyor.")
+
+    with tab5:
+        st.subheader("📂 Akbank Ekstresi İle Otomatik Tahsilat Eşleştirme")
+        st.info("Akbank'tan indirdiğiniz Excel veya CSV formatındaki hesap ekstresini buraya yükleyin. Sistem açıklamalardaki daire kodunu ve (Aidat/Su) türünü otomatik tespit edecektir.")
+        
+        ekstre_dosya = st.file_uploader("Akbank Ekstre Dosyası (Excel veya CSV)", type=["xlsx", "xls", "csv"])
+        
+        if ekstre_dosya is not None:
+            try:
+                if ekstre_dosya.name.endswith('.csv'):
+                    df_ekstre = pd.read_csv(ekstre_dosya)
+                else:
+                    df_ekstre = pd.read_excel(ekstre_dosya)
+                
+                st.markdown("### 📄 Yüklenen Ekstre Önizlemesi (Ham Veri)")
+                st.dataframe(df_ekstre.head(5), use_container_width=True)
+                
+                # Sütun isimleri esnekliği için arama
+                kolonlar = df_ekstre.columns.tolist()
+                aciklama_kolonu = next((c for c in kolonlar if "açıklama" in c.lower() or "detay" in c.lower() or "aciklama" in c.lower()), kolonlar[1] if len(kolonlar) > 1 else kolonlar[0])
+                tutar_kolonu = next((c for c in kolonlar if "tutar" in c.lower() or "alacak" in c.lower() or "tutar(tl)" in c.lower()), kolonlar[-1])
+                tarih_kolonu = next((c for c in kolonlar if "tarih" in c.lower()), kolonlar[0])
+                
+                st.success(f"Sütunlar başarıyla eşleşti -> Tarih: `{tarih_kolonu}`, Açıklama: `{aciklama_kolonu}`, Tutar: `{tutar_kolonu}`")
+                
+                if st.button("Ekstreyi Analiz Et ve Eşleştir"):
+                    islenen_satirlar = []
+                    
+                    for idx, row in df_ekstre.iterrows():
+                        aciklama_metni = str(row[aciklama_kolonu])
+                        
+                        # Tutarı temizle ve sayıya çevir
+                        ham_tutar = row[tutar_kolonu]
+                        try:
+                            if isinstance(ham_tutar, str):
+                                temiz_tutar = float(ham_tutar.replace(".", "").replace(",", ".").replace("TL", "").strip())
+                            else:
+                                temiz_tutar = float(ham_tutar)
+                        except:
+                            temiz_tutar = 0.0
+                            
+                        if temiz_tutar <= 0:
+                            continue # Giden paraları veya 0 tutarları atla
+                            
+                        daire_kodu, tahmin_turu = aciklama_analiz_et(aciklama_metni)
+                        
+                        if daire_kodu:
+                            islenen_satirlar.append({
+                                "Seç": True,
+                                "Index": idx,
+                                "Tarih": str(row[tarih_kolonu])[:10],
+                                "Daire": daire_kodu,
+                                "Tür": tahmin_turu,
+                                "Tutar": temiz_tutar,
+                                "Açıklama": aciklama_metni
+                            })
+                            
+                    if islenen_satirlar:
+                        st.session_state["islenen_ekstre_df"] = pd.DataFrame(islenen_satirlar)
+                    else:
+                        st.warning("Ekstrede hiçbir daire kodu (Örn: A-1, B-2) yakalanamadı. Lütfen açıklama sütununu kontrol edin.")
+                        
+            except Exception as e:
+                st.error(f- "Dosya okunurken bir hata oluştu: {e}")
+                
+        if "islenen_ekstre_df" in st.session_state and not st.session_state["islenen_ekstre_df"].empty:
+            st.markdown("### 🔍 Tespit Edilen Havaleler ve Eşleşmeler")
+            st.info("Aşağıdaki listede sistemin otomatik eşleştirdiği ödemeleri görebilirsiniz. Dilerseniz 'Tür' kısmını (Aidat/Su) değiştirebilir ve ardından onaylayabilirsiniz.")
+            
+            edited_ekstre_islem = st.data_editor(
+                st.session_state["islenen_ekstre_df"],
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Seç": st.column_config.CheckboxColumn("İşle?"),
+                    "Tür": st.column_config.SelectboxColumn("Borç Türü", options=["Aidat", "Su", "Eski Borç"]),
+                    "Tutar": st.column_config.NumberColumn("Tutar (TL)", format="%.2f ₺")
+                }
+            )
+            
+            if st.button("✅ Seçilen Ekstre Hareketlerini Borçlardan Düş ve Kasaya İşle"):
+                secilen_islem_satirlari = edited_ekstre_islem[edited_ekstre_islem["Seç"] == True]
+                
+                if not secilen_islem_satirlari.empty:
+                    basarili_sayisi = 0
+                    
+                    for _, row in secilen_islem_satirlari.iterrows():
+                        d_kodu = row["Daire"]
+                        b_turu = row["Tür"]
+                        tutar = row["Tutar"]
+                        tarih = row["Tarih"]
+                        ack = row["Açıklama"]
+                        
+                        # Bu dairenin o türdeki ödenmemiş borcunu bul
+                        bekleyen_borc = supabase.table("borclar").select("*").eq("daire_kodu", d_kodu).eq("tur", b_turu).eq("odendi", False).limit(1).execute().data
+                        
+                        if bekleyen_borc:
+                            borc_id = bekleyen_borc[0]["id"]
+                            # Borcu ödendi yap
+                            supabase.table("borclar").update({"odendi": True}).eq("id", borc_id).execute()
+                        else:
+                            # Eğer o türde açık borç yoksa, yine de kasaya gelir yazmak için borç tablosuna kapalı olarak ekleyebiliriz veya doğrudan tahsilata işleriz.
+                            pass
+                            
+                        # Tahsilat tablosuna işle
+                        supabase.table("tahsilat").insert({
+                            "daire_kodu": d_kodu,
+                            "tur": b_turu,
+                            "tutar": tutar,
+                            "tarih": tarih if len(tarih) == 10 else datetime.now().strftime("%Y-%m-%d"),
+                            "aciklama": f"Akbank Ekstre: {ack}"
+                        }).execute()
+                        
+                        basarili_sayisi += 1
+                        
+                    st.success(f"Başarıyla {basarili_sayisi} adet banka ödemesi eşleştirildi, ilgili borçlar kapatıldı ve kasaya işlendi!")
+                    del st.session_state["islenen_ekstre_df"]
+                    st.rerun()
+                else:
+                    st.warning("Lütfen listeden en az bir işlem seçin.")
 
 # --- 4. SU FATURASI GİRİŞİ ---
 elif secim == "💧 Su Faturası Girişi" and yonetici_giris_yapildi:
