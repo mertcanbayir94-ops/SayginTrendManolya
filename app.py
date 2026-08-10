@@ -200,12 +200,36 @@ elif secim == "📊 Dashboard / Kasa":
     toplam_gider = sum([g["tutar"] for g in gider_all]) if gider_all else 0.0
     kasa = toplam_gelir - toplam_gider
     toplam_alacak = sum([b["tutar"] for b in borc_all if not b["odendi"]]) if borc_all else 0.0
-
-    col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4 = st.columns(4)
     col1.metric("💰 Mevcut Kasa Bakiye", para_format(kasa))
     col2.metric("📈 Toplam Tahsilat", para_format(toplam_gelir))
     col3.metric("📉 Toplam Gider", para_format(toplam_gider))
     col4.metric("⚠️ Bekleyen Toplam Alacak", para_format(toplam_alacak))
+
+    st.markdown("---")
+    st.subheader("📊 Aylık Gelir / Gider Trendi")
+
+    tahsilat_tarihli = supabase.table("tahsilat").select("tarih, tutar").execute().data
+    gider_tarihli = supabase.table("giderler").select("tarih, tutar").execute().data
+
+    if tahsilat_tarihli or gider_tarihli:
+        df_gelir = pd.DataFrame(tahsilat_tarihli) if tahsilat_tarihli else pd.DataFrame(columns=["tarih", "tutar"])
+        df_gider = pd.DataFrame(gider_tarihli) if gider_tarihli else pd.DataFrame(columns=["tarih", "tutar"])
+
+        if not df_gelir.empty:
+            df_gelir["Ay"] = pd.to_datetime(df_gelir["tarih"]).dt.strftime("%Y-%m")
+        if not df_gider.empty:
+            df_gider["Ay"] = pd.to_datetime(df_gider["tarih"]).dt.strftime("%Y-%m")
+
+        aylik_gelir = df_gelir.groupby("Ay")["tutar"].sum() if not df_gelir.empty else pd.Series(dtype=float)
+        aylik_gider = df_gider.groupby("Ay")["tutar"].sum() if not df_gider.empty else pd.Series(dtype=float)
+
+        aylik_ozet = pd.DataFrame({"Gelir": aylik_gelir, "Gider": aylik_gider}).fillna(0.0).sort_index()
+        aylik_ozet.index = [turkce_donem_adi(pd.to_datetime(ay + "-01").strftime("%B %Y")) for ay in aylik_ozet.index]
+
+        st.bar_chart(aylik_ozet, color=["#2ecc71", "#e74c3c"])
+    else:
+        st.info("Henüz grafik oluşturacak kadar tahsilat veya gider kaydı bulunmuyor.")
 
     st.markdown("---")
     st.subheader("📋 Ödenmeyen Borçlar Listesi")
