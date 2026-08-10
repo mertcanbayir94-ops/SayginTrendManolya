@@ -242,14 +242,15 @@ elif secim == "📊 Dashboard / Kasa":
         df_gider = pd.DataFrame(gider_tarihli) if gider_tarihli else pd.DataFrame(columns=["tarih", "tutar"])
 
         if not df_gelir.empty:
-            df_gelir["Ay"] = pd.to_datetime(df_gelir["tarih"]).dt.strftime("%Y-%m")
+            df_gelir["Ay"] = pd.to_datetime(df_gelir["tarih"], errors='coerce').dt.strftime("%Y-%m")
         if not df_gider.empty:
-            df_gider["Ay"] = pd.to_datetime(df_gider["tarih"]).dt.strftime("%Y-%m")
+            df_gider["Ay"] = pd.to_datetime(df_gider["tarih"], errors='coerce').dt.strftime("%Y-%m")
 
         aylik_gelir = df_gelir.groupby("Ay")["tutar"].sum() if not df_gelir.empty else pd.Series(dtype=float)
         aylik_gider = df_gider.groupby("Ay")["tutar"].sum() if not df_gider.empty else pd.Series(dtype=float)
 
         aylik_ozet = pd.DataFrame({"Gelir": aylik_gelir, "Gider": aylik_gider}).fillna(0.0).sort_index()
+        aylik_ozet = aylik_ozet[aylik_ozet.index.notna() & (aylik_ozet.index != "NaT")]
         aylik_ozet.index = [turkce_donem_adi(pd.to_datetime(ay + "-01").strftime("%B %Y")) for ay in aylik_ozet.index]
 
         st.bar_chart(aylik_ozet, color=["#2ecc71", "#e74c3c"], stack=False)
@@ -522,7 +523,7 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                         st.warning("Ekstrede hiçbir daire kodu (Örn: A-1, B-2) yakalanamadı. Lütfen açıklama sütununu kontrol edin.")
                         
             except Exception as e:
-                st.error(f- "Dosya okunurken bir hata oluştu: {e}")
+                st.error(f"Dosya okunurken bir hata oluştu: {e}")
                 
         if "islenen_ekstre_df" in st.session_state and not st.session_state["islenen_ekstre_df"].empty:
             st.markdown("### 🔍 Tespit Edilen Havaleler ve Eşleşmeler")
@@ -557,11 +558,7 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                         
                         if bekleyen_borc:
                             borc_id = bekleyen_borc[0]["id"]
-                            # Borcu ödendi yap
                             supabase.table("borclar").update({"odendi": True}).eq("id", borc_id).execute()
-                        else:
-                            # Eğer o türde açık borç yoksa, yine de kasaya gelir yazmak için borç tablosuna kapalı olarak ekleyebiliriz veya doğrudan tahsilata işleriz.
-                            pass
                             
                         # Tahsilat tablosuna işle
                         supabase.table("tahsilat").insert({
@@ -688,7 +685,7 @@ elif secim == "💸 Gider Ekle & Dekont Takibi":
                     "kategori": kategori, "tutar": tutar, "tarih": datetime.now().strftime("%Y-%m-%d"), 
                     "aciklama": aciklama, "dekont_yolu": dosya_yolu
                 }).execute()
-                st.success("Gider ve dekont başarıyla sisteme kaydedildi!")
+                st.success("Gider dan dekont başarıyla sisteme kaydedildi!")
                 st.rerun()
         st.markdown("---")
 
