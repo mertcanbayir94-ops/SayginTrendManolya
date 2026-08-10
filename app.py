@@ -1,15 +1,12 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import os
 from supabase import create_client, Client
 
 # Page Configuration
 st.set_page_config(page_title="Manolya Trend Yönetimi", page_icon="🏢", layout="wide")
 
-UPLOAD_FOLDER = "dekontlar"
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
+STORAGE_BUCKET = "dekontlar"  # Supabase Storage'da oluşturduğun bucket adı
 
 # --- SUPABASE BAĞLANTISI ---
 @st.cache_resource
@@ -237,6 +234,11 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
     with tab1:
         st.subheader("Tüm Dairelere Özel Aidat Borcu Yansıt")
         donem = st.text_input("Dönem / Ay", value=simdiki_donem_tr)
+
+        mevcut_kayit = supabase.table("borclar").select("id").eq("donem", donem).eq("tur", "Aidat").limit(1).execute().data
+        if mevcut_kayit:
+            st.warning(f"'{donem}' dönemi için zaten aidat borcu oluşturulmuş. Tekrar eklersen mükerrer kayıt oluşur.")
+
         if st.button("Toplu Aidat Yansıt"):
             daireler = supabase.table("daireler").select("daire_kodu, aidat_tutari").eq("aidat_muaf", False).execute().data
             kayitlar = []
@@ -248,6 +250,7 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
             if kayitlar:
                 supabase.table("borclar").insert(kayitlar).execute()
             st.success(f"{len(daireler)} daireye özel aidat borçları başarıyla eklendi!")
+            st.rerun()
 
     with tab2:
         st.subheader("💳 Aidat Tahsil Et (Tablodan Seçerek)")
@@ -263,22 +266,25 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
             df_aidat['Dönem'] = df_aidat['donem'].apply(turkce_donem_adi)
             df_aidat['Tutar (TL)'] = df_aidat['tutar'].apply(para_format)
             
-            # Sütun sırasını düzenle
-            df_aidat_goster = df_aidat[['Sec', 'daire_kodu', 'Malik / Sakin', 'Dönem', 'Tutar (TL)']]
-            df_aidat_goster.columns = ['Seç', 'Daire', 'Malik / Sakin', 'Dönem', 'Tutar (TL)']
+            # id sütununu gizli tutuyoruz ama tabloda kalıyor, seçim eşlemesi id üzerinden yapılacak
+            df_aidat_goster = df_aidat[['Sec', 'id', 'daire_kodu', 'Malik / Sakin', 'Dönem', 'Tutar (TL)']]
+            df_aidat_goster.columns = ['Seç', 'ID', 'Daire', 'Malik / Sakin', 'Dönem', 'Tutar (TL)']
             
-            edited_aidat_df = st.data_editor(df_aidat_goster, hide_index=True, use_container_width=True, key="aidat_tahsil_editor")
+            edited_aidat_df = st.data_editor(
+                df_aidat_goster, hide_index=True, use_container_width=True, key="aidat_tahsil_editor",
+                disabled=["ID", "Daire", "Malik / Sakin", "Dönem", "Tutar (TL)"],
+                column_config={"ID": None}  # ID sütununu görsel olarak gizle, veri kalır
+            )
             aciklama_toplu_aidat = st.text_input("Ödeme Açıklaması", value="EFT/Nakit Aidat Ödemesi", key="aidat_ack_input")
             
             if st.button("Seçilen Aidatları Tahsil Et ve Kasaya İşle"):
                 secilenler = edited_aidat_df[edited_aidat_df['Seç'] == True]
                 if not secilenler.empty:
+                    borc_map = {b['id']: b for b in aidat_borclari}
                     tahsilat_listesi = []
-                    for idx, row in secilenler.iterrows():
-                        b_id = aidat_borclari[idx]['id']
-                        b_item = aidat_borclari[idx]
-                        
-                        supabase.table("borclar").update({"odendi": True}).eq("id", b_id).execute()
+                    for _, row in secilenler.iterrows():
+                        b_item = borc_map[row['ID']]
+                        supabase.table("borclar").update({"odendi": True}).eq("id", b_item['id']).execute()
                         tahsilat_listesi.append({
                             "daire_kodu": b_item["daire_kodu"], "tur": "Aidat", 
                             "tutar": b_item["tutar"], "tarih": datetime.now().strftime("%Y-%m-%d"), "aciklama": aciklama_toplu_aidat
@@ -306,21 +312,24 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
             df_su_borc['Dönem'] = df_su_borc['donem'].apply(turkce_donem_adi)
             df_su_borc['Tutar (TL)'] = df_su_borc['tutar'].apply(para_format)
             
-            df_su_goster = df_su_borc[['Sec', 'daire_kodu', 'Malik / Sakin', 'Dönem', 'Tutar (TL)']]
-            df_su_goster.columns = ['Seç', 'Daire', 'Malik / Sakin', 'Dönem', 'Tutar (TL)']
+            df_su_goster = df_su_borc[['Sec', 'id', 'daire_kodu', 'Malik / Sakin', 'Dönem', 'Tutar (TL)']]
+            df_su_goster.columns = ['Seç', 'ID', 'Daire', 'Malik / Sakin', 'Dönem', 'Tutar (TL)']
             
-            edited_su_df = st.data_editor(df_su_goster, hide_index=True, use_container_width=True, key="su_tahsil_editor")
+            edited_su_df = st.data_editor(
+                df_su_goster, hide_index=True, use_container_width=True, key="su_tahsil_editor",
+                disabled=["ID", "Daire", "Malik / Sakin", "Dönem", "Tutar (TL)"],
+                column_config={"ID": None}
+            )
             aciklama_toplu_su = st.text_input("Su Ödeme Açıklaması", value="EFT/Nakit Su Ödemesi", key="su_ack_input")
             
             if st.button("Seçilen Su Borçlarını Tahsil Et ve Kasaya İşle"):
                 secilenler_su = edited_su_df[edited_su_df['Seç'] == True]
                 if not secilenler_su.empty:
+                    borc_map_su = {b['id']: b for b in su_borclari}
                     tahsilat_listesi_su = []
-                    for idx, row in secilenler_su.iterrows():
-                        b_id = su_borclari[idx]['id']
-                        b_item = su_borclari[idx]
-                        
-                        supabase.table("borclar").update({"odendi": True}).eq("id", b_id).execute()
+                    for _, row in secilenler_su.iterrows():
+                        b_item = borc_map_su[row['ID']]
+                        supabase.table("borclar").update({"odendi": True}).eq("id", b_item['id']).execute()
                         tahsilat_listesi_su.append({
                             "daire_kodu": b_item["daire_kodu"], "tur": "Su", 
                             "tutar": b_item["tutar"], "tarih": datetime.now().strftime("%Y-%m-%d"), "aciklama": aciklama_toplu_su
@@ -373,6 +382,10 @@ elif secim == "💧 Su Faturası Girişi" and yonetici_giris_yapildi:
         bahce_tuketimi = st.number_input("Bahçe Sulama Tüketimi (m3)", min_value=0.0, value=95.0, step=1.0)
         
     donem_su = st.text_input("Su Faturası Dönemi", value=f"{simdiki_donem_tr} Su")
+
+    mevcut_su_kayit = supabase.table("borclar").select("id").eq("donem", donem_su).eq("tur", "Su").limit(1).execute().data
+    if mevcut_su_kayit:
+        st.warning(f"'{donem_su}' dönemi için zaten su borcu oluşturulmuş. Tekrar hesaplarsan mükerrer kayıt oluşur.")
     
     st.markdown("### Daire Su Sayaçları (Yeni Endeksleri Tablodan Giriniz)")
     daireler_data = supabase.table("daireler").select("daire_kodu, sakin_adi, son_su_endeks, bahce_orani").order("daire_kodu").execute().data
@@ -394,6 +407,7 @@ elif secim == "💧 Su Faturası Girişi" and yonetici_giris_yapildi:
         toplam_bahce_bedeli = bahce_tuketimi * birim_fiyat
         
         toplam_eklenen = 0
+        atlanan_daireler = []
         borc_eklemeleri = []
         
         for idx, row in edited_su_df.iterrows():
@@ -420,11 +434,15 @@ elif secim == "💧 Su Faturası Girişi" and yonetici_giris_yapildi:
                     toplam_eklenen += 1
                 
                 supabase.table("daireler").update({"son_su_endeks": yeni}).eq("daire_kodu", d_kodu).execute()
+            else:
+                atlanan_daireler.append(d_kodu)
                 
         if borc_eklemeleri:
             supabase.table("borclar").insert(borc_eklemeleri).execute()
             
         st.success(f"Hesaplama tamamlandı! {toplam_eklenen} daire için su borçlandırması yapıldı.")
+        if atlanan_daireler:
+            st.warning(f"Şu dairelerde yeni endeks eskisinden düşük görünüyor, atlandı (kontrol et): {', '.join(atlanan_daireler)}")
 
 # --- 5. GİDER EKLE & DEKONT TAKİBİ ---
 elif secim == "💸 Gider Ekle & Dekont Takibi":
@@ -444,16 +462,22 @@ elif secim == "💸 Gider Ekle & Dekont Takibi":
             if st.form_submit_button("Gideri ve Dekontu Kaydet"):
                 dosya_yolu = None
                 if dekont_dosya is not None:
-                    dosya_adi = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{dekont_dosya.name}"
-                    dosya_yolu = os.path.join(UPLOAD_FOLDER, dosya_adi)
-                    with open(dosya_yolu, "wb") as f:
-                        f.write(dekont_dosya.getbuffer())
+                    try:
+                        dosya_adi = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{dekont_dosya.name}"
+                        supabase.storage.from_(STORAGE_BUCKET).upload(
+                            dosya_adi,
+                            dekont_dosya.getvalue(),
+                            {"content-type": dekont_dosya.type}
+                        )
+                        dosya_yolu = dosya_adi  # bucket içindeki dosya adı; artık yerel path değil
+                    except Exception as e:
+                        st.error(f"Dekont yüklenirken hata oluştu: {e}")
                 
                 supabase.table("giderler").insert({
                     "kategori": kategori, "tutar": tutar, "tarih": datetime.now().strftime("%Y-%m-%d"), 
                     "aciklama": aciklama, "dekont_yolu": dosya_yolu
                 }).execute()
-                st.success("Gider dan dekont başarıyla sisteme kaydedildi!")
+                st.success("Gider ve dekont başarıyla sisteme kaydedildi!")
                 st.rerun()
         st.markdown("---")
 
@@ -465,17 +489,17 @@ elif secim == "💸 Gider Ekle & Dekont Takibi":
             formatted_tutari = para_format(g['tutar'])
             with st.expander(f"📌 [{g['tarih']}] {g['kategori']} - **{formatted_tutari}**"):
                 st.write(f"**Açıklama:** {g['aciklama'] if g['aciklama'] else 'Açıklama girilmemiş.'}")
-                if g['dekont_yolu'] and os.path.exists(g['dekont_yolu']):
-                    dosya_uzanti = g['dekont_yolu'].split('.')[-1].lower()
-                    if dosya_uzanti in ['png', 'jpg', 'jpeg']:
-                        st.image(g['dekont_yolu'], caption="İlgili Harcama Dekontu / Faturası", use_container_width=True)
-                    else:
-                        with open(g['dekont_yolu'], "rb") as f:
-                            st.download_button(
-                                label="📥 Dekontu / Faturayı İndir (PDF)",
-                                data=f, file_name=os.path.basename(g['dekont_yolu']),
-                                mime="application/pdf", key=f"pdf_down_{g['id']}"
-                            )
+                if g['dekont_yolu']:
+                    try:
+                        dosya_uzanti = g['dekont_yolu'].split('.')[-1].lower()
+                        signed = supabase.storage.from_(STORAGE_BUCKET).create_signed_url(g['dekont_yolu'], 3600)
+                        signed_url = signed.get('signedURL') or signed.get('signed_url')
+                        if dosya_uzanti in ['png', 'jpg', 'jpeg']:
+                            st.image(signed_url, caption="İlgili Harcama Dekontu / Faturası", use_container_width=True)
+                        else:
+                            st.link_button("📥 Dekontu / Faturayı İndir (PDF)", signed_url)
+                    except Exception as e:
+                        st.warning(f"Dekont görüntülenemedi: {e}")
                 else:
                     st.info("Bu harcama için yüklenmiş bir dosya bulunmuyor.")
     else:
