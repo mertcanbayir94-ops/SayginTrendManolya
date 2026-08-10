@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import io
 from datetime import datetime
 from supabase import create_client, Client
 
@@ -232,7 +233,7 @@ elif secim == "📊 Dashboard / Kasa":
     else:
         st.info("Henüz grafik oluşturacak kadar tahsilat veya gider kaydı bulunmuyor.")
 
-    st.markdown("---")
+      st.markdown("---")
     st.subheader("📋 Ödenmeyen Borçlar Listesi")
     
     bekleyen_borclar = supabase.table("borclar").select("daire_kodu, tur, tutar, donem").eq("odendi", False).order("daire_kodu").execute().data
@@ -251,6 +252,50 @@ elif secim == "📊 Dashboard / Kasa":
         st.dataframe(pd.DataFrame(bekleyen_list), use_container_width=True)
     else:
         st.success("Tüm borçlar ödenmiş, harika!")
+
+    st.markdown("---")
+    st.subheader("📥 Excel Raporu")
+    st.caption("Bekleyen borçlar, tüm tahsilatlar ve tüm giderleri tek bir Excel dosyasında (3 ayrı sayfa halinde) indir.")
+
+    if yonetici_giris_yapildi:
+        tahsilat_rapor = supabase.table("tahsilat").select("*").order("tarih", desc=True).execute().data
+        gider_rapor = supabase.table("giderler").select("*").order("tarih", desc=True).execute().data
+
+        df_bekleyen_excel = pd.DataFrame(bekleyen_list) if bekleyen_borclar else pd.DataFrame(columns=["Daire", "Malik/Sakin", "Borç Türü", "Tutar (TL)", "Dönem"])
+
+        df_tahsilat_excel = pd.DataFrame(tahsilat_rapor) if tahsilat_rapor else pd.DataFrame()
+        if not df_tahsilat_excel.empty:
+            df_tahsilat_excel = df_tahsilat_excel[["tarih", "daire_kodu", "tur", "tutar", "aciklama"]]
+            df_tahsilat_excel.columns = ["Tarih", "Daire", "Tür", "Tutar (TL)", "Açıklama"]
+
+        df_gider_excel = pd.DataFrame(gider_rapor) if gider_rapor else pd.DataFrame()
+        if not df_gider_excel.empty:
+            df_gider_excel = df_gider_excel[["tarih", "kategori", "tutar", "aciklama"]]
+            df_gider_excel.columns = ["Tarih", "Kategori", "Tutar (TL)", "Açıklama"]
+
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
+            df_bekleyen_excel.to_excel(writer, sheet_name="Bekleyen Borclar", index=False)
+            df_tahsilat_excel.to_excel(writer, sheet_name="Tahsilatlar", index=False)
+            df_gider_excel.to_excel(writer, sheet_name="Giderler", index=False)
+        excel_buffer.seek(0)
+
+        st.download_button(
+            label="📥 Excel Raporunu İndir",
+            data=excel_buffer,
+            file_name=f"manolya_rapor_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    else:
+        st.info("Excel raporu indirmek için yönetici girişi yapmalısınız.")
+
+# --- 3. TAHSİLAT YÖNETİMİ ---
+elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_giris_yapildi:
+    st.header("💳 Tahsilat Yönetimi")
+    tab1, tab2, tab3, tab4 = st.tabs(["📌 Toplu Aidat Borçlandır", "💳 Aidat Tahsil Et (Tablo)", "💧 Su Tahsil Et (Tablo)", "📜 Eski Borç Tahsil Et"])
+    
+    with tab1:
+        st.subheader("Tüm Dairelere Özel Aidat Borcu Yansıt")
 
 # --- 3. TAHSİLAT YÖNETİMİ ---
 elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_giris_yapildi:
