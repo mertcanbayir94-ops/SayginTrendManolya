@@ -228,7 +228,7 @@ elif secim == "📊 Dashboard / Kasa":
         aylik_ozet = pd.DataFrame({"Gelir": aylik_gelir, "Gider": aylik_gider}).fillna(0.0).sort_index()
         aylik_ozet.index = [turkce_donem_adi(pd.to_datetime(ay + "-01").strftime("%B %Y")) for ay in aylik_ozet.index]
 
-        st.bar_chart(aylik_ozet, color=["#2ecc71", "#e74c3c"])
+        st.bar_chart(aylik_ozet, color=["#2ecc71", "#e74c3c"], stack=False)
     else:
         st.info("Henüz grafik oluşturacak kadar tahsilat veya gider kaydı bulunmuyor.")
 
