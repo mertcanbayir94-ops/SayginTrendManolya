@@ -233,7 +233,7 @@ elif secim == "📊 Dashboard / Kasa":
     else:
         st.info("Henüz grafik oluşturacak kadar tahsilat veya gider kaydı bulunmuyor.")
 
-      st.markdown("---")
+    st.markdown("---")
     st.subheader("📋 Ödenmeyen Borçlar Listesi")
     
     bekleyen_borclar = supabase.table("borclar").select("daire_kodu, tur, tutar, donem").eq("odendi", False).order("daire_kodu").execute().data
