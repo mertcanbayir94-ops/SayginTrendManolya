@@ -200,7 +200,8 @@ elif secim == "📊 Dashboard / Kasa":
     toplam_gider = sum([g["tutar"] for g in gider_all]) if gider_all else 0.0
     kasa = toplam_gelir - toplam_gider
     toplam_alacak = sum([b["tutar"] for b in borc_all if not b["odendi"]]) if borc_all else 0.0
-col1, col2, col3, col4 = st.columns(4)
+
+    col1, col2, col3, col4 = st.columns(4)
     col1.metric("💰 Mevcut Kasa Bakiye", para_format(kasa))
     col2.metric("📈 Toplam Tahsilat", para_format(toplam_gelir))
     col3.metric("📉 Toplam Gider", para_format(toplam_gider))
