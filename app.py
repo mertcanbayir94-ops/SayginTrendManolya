@@ -104,7 +104,8 @@ simdiki_donem_tr = turkce_donem_adi(ing_simdiki_ay)
 # Sidebar Giriş
 st.sidebar.markdown("### 🔐 Yönetici Girişi")
 yonetici_sifresi = st.sidebar.text_input("Yönetici Şifresi", type="password")
-yonetici_giris_yapildi = (yonetici_sifresi == "1234")
+dogru_sifre = st.secrets["admin"]["password"]
+yonetici_giris_yapildi = (yonetici_sifresi != "" and yonetici_sifresi == dogru_sifre)
 
 if yonetici_giris_yapildi:
     st.sidebar.success("Yönetici Girişi Başarılı ✅")
@@ -266,14 +267,13 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
             df_aidat['Dönem'] = df_aidat['donem'].apply(turkce_donem_adi)
             df_aidat['Tutar (TL)'] = df_aidat['tutar'].apply(para_format)
             
-            # id sütununu gizli tutuyoruz ama tabloda kalıyor, seçim eşlemesi id üzerinden yapılacak
             df_aidat_goster = df_aidat[['Sec', 'id', 'daire_kodu', 'Malik / Sakin', 'Dönem', 'Tutar (TL)']]
             df_aidat_goster.columns = ['Seç', 'ID', 'Daire', 'Malik / Sakin', 'Dönem', 'Tutar (TL)']
             
             edited_aidat_df = st.data_editor(
                 df_aidat_goster, hide_index=True, use_container_width=True, key="aidat_tahsil_editor",
                 disabled=["ID", "Daire", "Malik / Sakin", "Dönem", "Tutar (TL)"],
-                column_config={"ID": None}  # ID sütununu görsel olarak gizle, veri kalır
+                column_config={"ID": None}
             )
             aciklama_toplu_aidat = st.text_input("Ödeme Açıklaması", value="EFT/Nakit Aidat Ödemesi", key="aidat_ack_input")
             
@@ -469,7 +469,7 @@ elif secim == "💸 Gider Ekle & Dekont Takibi":
                             dekont_dosya.getvalue(),
                             {"content-type": dekont_dosya.type}
                         )
-                        dosya_yolu = dosya_adi  # bucket içindeki dosya adı; artık yerel path değil
+                        dosya_yolu = dosya_adi
                     except Exception as e:
                         st.error(f"Dekont yüklenirken hata oluştu: {e}")
                 
