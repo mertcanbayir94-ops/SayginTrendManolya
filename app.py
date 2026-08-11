@@ -256,8 +256,7 @@ elif secim == "📊 Dashboard / Kasa":
         st.bar_chart(aylik_ozet, color=["#2ecc71", "#e74c3c"], stack=False)
     else:
         st.info("Henüz grafik oluşturacak kadar tahsilat veya gider kaydı bulunmuyor.")
-
-    st.markdown("---")
+        st.markdown("---")
     st.subheader("📋 Ödenmeyen Borçlar Listesi")
     
     bekleyen_borclar = supabase.table("borclar").select("daire_kodu, tur, tutar, donem").eq("odendi", False).order("daire_kodu").execute().data
@@ -484,7 +483,6 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                 tarih_kolonu = next((c for c in kolonlar if "tarih" in c.lower()), kolonlar[0])
                 
                 st.success(f"Sütunlar başarıyla eşleşti -> Tarih: `{tarih_kolonu}`, Açıklama: `{aciklama_kolonu}`, Tutar: `{tutar_kolonu}`")
-                
                 if st.button("Ekstreyi Analiz Et ve Eşleştir"):
                     islenen_satirlar = []
                     
@@ -545,33 +543,68 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                 
                 if not secilen_islem_satirlari.empty:
                     basarili_sayisi = 0
+                    kismi_odeme_listesi = []
+                    eslesmeyen_listesi = []
+                    mukerrer_listesi = []
                     
                     for _, row in secilen_islem_satirlari.iterrows():
                         d_kodu = row["Daire"]
                         b_turu = row["Tür"]
-                        tutar = row["Tutar"]
+                        tutar = float(row["Tutar"])
                         tarih = row["Tarih"]
+                        tarih_norm = tarih if len(str(tarih)) == 10 else datetime.now().strftime("%Y-%m-%d")
                         ack = row["Açıklama"]
-                        
+
+                        # Mükerrer işlem kontrolü: aynı daire+tür+tarih+tutar zaten kasaya işlenmiş mi?
+                        mukerrer_kontrol = supabase.table("tahsilat").select("id") \
+                            .eq("daire_kodu", d_kodu).eq("tur", b_turu) \
+                            .eq("tarih", tarih_norm).eq("tutar", tutar).limit(1).execute().data
+                        if mukerrer_kontrol:
+                            mukerrer_listesi.append(f"{d_kodu} ({b_turu}, {tarih_norm}, {para_format(tutar)})")
+                            continue
+
                         # Bu dairenin o türdeki ödenmemiş borcunu bul
-                        bekleyen_borc = supabase.table("borclar").select("*").eq("daire_kodu", d_kodu).eq("tur", b_turu).eq("odendi", False).limit(1).execute().data
-                        
-                        if bekleyen_borc:
-                            borc_id = bekleyen_borc[0]["id"]
-                            supabase.table("borclar").update({"odendi": True}).eq("id", borc_id).execute()
-                            
-                        # Tahsilat tablosuna işle
+                        bekleyen_borc = supabase.table("borclar").select("*") \
+                            .eq("daire_kodu", d_kodu).eq("tur", b_turu).eq("odendi", False) \
+                            .order("id").limit(1).execute().data
+
+                        if not bekleyen_borc:
+                            # Eşleşen açık borç yok -> tahsilat kaydı ATILMAZ, sadece raporlanır
+                            eslesmeyen_listesi.append(f"{d_kodu} ({b_turu}) - {para_format(tutar)}")
+                            continue
+
+                        borc_item = bekleyen_borc[0]
+                        borc_tutari = float(borc_item["tutar"])
+
+                        # Gelen tutar borcu tam karşılıyor mu?
+                        if tutar + 0.01 >= borc_tutari:
+                            supabase.table("borclar").update({"odendi": True}).eq("id", borc_item["id"]).execute()
+                        else:
+                            # Kısmi ödeme: borcu KAPATMA, sadece tahsilatı kaydet ve uyar
+                            kismi_odeme_listesi.append(
+                                f"{d_kodu} ({b_turu}): borç {para_format(borc_tutari)}, gelen {para_format(tutar)} — borç açık bırakıldı"
+                            )
+
+                        # Tahsilat tablosuna işle (sadece eşleşen borç varsa buraya gelinir)
                         supabase.table("tahsilat").insert({
                             "daire_kodu": d_kodu,
                             "tur": b_turu,
                             "tutar": tutar,
-                            "tarih": tarih if len(tarih) == 10 else datetime.now().strftime("%Y-%m-%d"),
+                            "tarih": tarih_norm,
                             "aciklama": f"Akbank Ekstre: {ack}"
                         }).execute()
                         
                         basarili_sayisi += 1
                         
-                    st.success(f"Başarıyla {basarili_sayisi} adet banka ödemesi eşleştirildi, ilgili borçlar kapatıldı ve kasaya işlendi!")
+                    if basarili_sayisi:
+                        st.success(f"Başarıyla {basarili_sayisi} adet banka ödemesi kasaya işlendi!")
+                    if kismi_odeme_listesi:
+                        st.warning("⚠️ Kısmi ödemeler (borç kapatılmadı, kontrol et):\n\n" + "\n".join(f"- {x}" for x in kismi_odeme_listesi))
+                    if eslesmeyen_listesi:
+                        st.warning("⚠️ Bu işlemler için açık borç bulunamadı, tahsilat kaydedilmedi (elle kontrol et):\n\n" + "\n".join(f"- {x}" for x in eslesmeyen_listesi))
+                    if mukerrer_listesi:
+                        st.info("ℹ️ Şu işlemler daha önce zaten kasaya işlenmişti, tekrar eklenmedi:\n\n" + "\n".join(f"- {x}" for x in mukerrer_listesi))
+
                     del st.session_state["islenen_ekstre_df"]
                     st.rerun()
                 else:
@@ -685,7 +718,7 @@ elif secim == "💸 Gider Ekle & Dekont Takibi":
                     "kategori": kategori, "tutar": tutar, "tarih": datetime.now().strftime("%Y-%m-%d"), 
                     "aciklama": aciklama, "dekont_yolu": dosya_yolu
                 }).execute()
-                st.success("Gider dan dekont başarıyla sisteme kaydedildi!")
+                st.success("Gider ve dekont başarıyla sisteme kaydedildi!")
                 st.rerun()
         st.markdown("---")
 
