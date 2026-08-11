@@ -6,7 +6,7 @@ from datetime import datetime
 from supabase import create_client, Client
 
 # Page Configuration
-st.set_page_config(page_title="Manolya Trend Yönetimi", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Manolya Trend Yönetimi", page_icon="🏢", layout="wide", initial_sidebar_state="expanded")
 
 STORAGE_BUCKET = "dekontlar"  # Supabase Storage'da oluşturduğun bucket adı
 
