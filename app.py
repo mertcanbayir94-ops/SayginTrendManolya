@@ -230,7 +230,7 @@ else:
         "💸 Gider Ekle & Dekont Takibi"
     ]
 
-secim = st.sidebar.selectbox("Navigasyon", menu)
+secim = st.sidebar.radio("Navigasyon", menu, index=0)
 
 # --- 1. DAİRE HESAP ÖZETİ ---
 if secim == "🏠 Daire Hesap Özeti (Sakin Ekranı)":
