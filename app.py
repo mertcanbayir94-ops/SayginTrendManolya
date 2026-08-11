@@ -65,6 +65,87 @@ def aciklama_analiz_et(aciklama):
         
     return daire_kodu, borc_turu
 
+
+@st.cache_data(ttl=30)
+def daireler_map_getir():
+    """Daire kodu -> sakin adı eşlemesini kısa süreli önbellekten döndürür."""
+    data = supabase.table("daireler").select("daire_kodu, sakin_adi").execute().data or []
+    return {d["daire_kodu"]: d["sakin_adi"] for d in data}
+
+
+def borc_tahsil_sekmesi(borc_turu, key_prefix, varsayilan_aciklama):
+    """Aidat/Su gibi aynı akışa sahip borç tahsilat sekmelerini tek yerde yönetir."""
+    ikon = "💧" if borc_turu == "Su" else "💳"
+    st.subheader(f"{ikon} {borc_turu} Tahsil Et (Tablodan Seçerek)")
+    st.info(f"Tablodan {borc_turu.lower()} ödemesi yapan dairelerin yanındaki kutucuğu işaretleyin ve aşağıdaki butona basın.")
+
+    borclar = (
+        supabase.table("borclar")
+        .select("*")
+        .eq("odendi", False)
+        .eq("tur", borc_turu)
+        .order("daire_kodu")
+        .execute()
+        .data
+    )
+
+    if not borclar:
+        st.info(f"Ödenmemiş bekleyen {borc_turu.lower()} borcu bulunmuyor.")
+        return
+
+    daireler_map = daireler_map_getir()
+    df_borc = pd.DataFrame(borclar)
+    df_borc["Sec"] = False
+    df_borc["Malik / Sakin"] = df_borc["daire_kodu"].map(daireler_map)
+    df_borc["Dönem"] = df_borc["donem"].apply(turkce_donem_adi)
+    df_borc["Tutar (TL)"] = df_borc["tutar"].apply(para_format)
+
+    df_goster = df_borc[["Sec", "id", "daire_kodu", "Malik / Sakin", "Dönem", "Tutar (TL)"]]
+    df_goster.columns = ["Seç", "ID", "Daire", "Malik / Sakin", "Dönem", "Tutar (TL)"]
+
+    edited_df = st.data_editor(
+        df_goster,
+        hide_index=True,
+        use_container_width=True,
+        key=f"{key_prefix}_tahsil_editor",
+        disabled=["ID", "Daire", "Malik / Sakin", "Dönem", "Tutar (TL)"],
+        column_config={"ID": None},
+    )
+
+    aciklama = st.text_input(
+        f"{borc_turu} Ödeme Açıklaması",
+        value=varsayilan_aciklama,
+        key=f"{key_prefix}_ack_input",
+    )
+
+    if st.button(
+        f"Seçilen {borc_turu} Borçlarını Tahsil Et ve Kasaya İşle",
+        key=f"{key_prefix}_tahsil_button",
+    ):
+        secilenler = edited_df[edited_df["Seç"] == True]
+        if secilenler.empty:
+            st.warning("Lütfen tablodan en az bir daire seçin.")
+            return
+
+        borc_map = {b["id"]: b for b in borclar}
+        tahsilat_listesi = []
+        for _, row in secilenler.iterrows():
+            b_item = borc_map[row["ID"]]
+            supabase.table("borclar").update({"odendi": True}).eq("id", b_item["id"]).execute()
+            tahsilat_listesi.append({
+                "daire_kodu": b_item["daire_kodu"],
+                "tur": borc_turu,
+                "tutar": b_item["tutar"],
+                "tarih": datetime.now().strftime("%Y-%m-%d"),
+                "aciklama": aciklama,
+            })
+
+        if tahsilat_listesi:
+            supabase.table("tahsilat").insert(tahsilat_listesi).execute()
+
+        st.success(f"Seçilen {len(secilenler)} dairenin {borc_turu.lower()} ödemesi başarıyla kasaya işlendi!")
+        st.rerun()
+
 # İlk Kurulum / Tablo Kontrolü ve Varsayılan Veriler
 def init_db():
     try:
@@ -149,12 +230,7 @@ else:
         "💸 Gider Ekle & Dekont Takibi"
     ]
 
-st.sidebar.markdown("### 📋 Navigasyon")
-secim = st.sidebar.radio(
-    "Menü",
-    menu,
-    label_visibility="collapsed"
-)
+secim = st.sidebar.radio("Navigasyon", menu, index=0)
 
 # --- 1. DAİRE HESAP ÖZETİ ---
 if secim == "🏠 Daire Hesap Özeti (Sakin Ekranı)":
@@ -265,7 +341,7 @@ elif secim == "📊 Dashboard / Kasa":
     st.subheader("📋 Ödenmeyen Borçlar Listesi")
     
     bekleyen_borclar = supabase.table("borclar").select("daire_kodu, tur, tutar, donem").eq("odendi", False).order("daire_kodu").execute().data
-    daireler_map = {d["daire_kodu"]: d["sakin_adi"] for d in supabase.table("daireler").select("daire_kodu, sakin_adi").execute().data}
+    daireler_map = daireler_map_getir()
     
     if bekleyen_borclar:
         bekleyen_list = []
@@ -350,99 +426,15 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
             st.rerun()
 
     with tab2:
-        st.subheader("💳 Aidat Tahsil Et (Tablodan Seçerek)")
-        st.info("Tablodan ödeme alan dairelerin yanındaki kutucuğu işaretleyin ve aşağıdaki butona basın.")
-        
-        aidat_borclari = supabase.table("borclar").select("*").eq("odendi", False).eq("tur", "Aidat").order("daire_kodu").execute().data
-        daireler_map = {d["daire_kodu"]: d["sakin_adi"] for d in supabase.table("daireler").select("daire_kodu, sakin_adi").execute().data}
-        
-        if aidat_borclari:
-            df_aidat = pd.DataFrame(aidat_borclari)
-            df_aidat['Sec'] = False
-            df_aidat['Malik / Sakin'] = df_aidat['daire_kodu'].map(daireler_map)
-            df_aidat['Dönem'] = df_aidat['donem'].apply(turkce_donem_adi)
-            df_aidat['Tutar (TL)'] = df_aidat['tutar'].apply(para_format)
-            
-            df_aidat_goster = df_aidat[['Sec', 'id', 'daire_kodu', 'Malik / Sakin', 'Dönem', 'Tutar (TL)']]
-            df_aidat_goster.columns = ['Seç', 'ID', 'Daire', 'Malik / Sakin', 'Dönem', 'Tutar (TL)']
-            
-            edited_aidat_df = st.data_editor(
-                df_aidat_goster, hide_index=True, use_container_width=True, key="aidat_tahsil_editor",
-                disabled=["ID", "Daire", "Malik / Sakin", "Dönem", "Tutar (TL)"],
-                column_config={"ID": None}
-            )
-            aciklama_toplu_aidat = st.text_input("Ödeme Açıklaması", value="EFT/Nakit Aidat Ödemesi", key="aidat_ack_input")
-            
-            if st.button("Seçilen Aidatları Tahsil Et ve Kasaya İşle"):
-                secilenler = edited_aidat_df[edited_aidat_df['Seç'] == True]
-                if not secilenler.empty:
-                    borc_map = {b['id']: b for b in aidat_borclari}
-                    tahsilat_listesi = []
-                    for _, row in secilenler.iterrows():
-                        b_item = borc_map[row['ID']]
-                        supabase.table("borclar").update({"odendi": True}).eq("id", b_item['id']).execute()
-                        tahsilat_listesi.append({
-                            "daire_kodu": b_item["daire_kodu"], "tur": "Aidat", 
-                            "tutar": b_item["tutar"], "tarih": datetime.now().strftime("%Y-%m-%d"), "aciklama": aciklama_toplu_aidat
-                        })
-                    if tahsilat_listesi:
-                        supabase.table("tahsilat").insert(tahsilat_listesi).execute()
-                    st.success(f"Seçilen {len(secilenler)} dairenin aidat ödemesi başarıyla kasaya işlendi!")
-                    st.rerun()
-                else:
-                    st.warning("Lütfen tablodan en az bir daire seçin.")
-        else:
-            st.info("Ödenmemiş bekleyen aidat borcu bulunmuyor.")
+        borc_tahsil_sekmesi("Aidat", "aidat", "EFT/Nakit Aidat Ödemesi")
 
     with tab3:
-        st.subheader("💧 Su Tahsil Et (Tablodan Seçerek)")
-        st.info("Tablodan suyu ödeyen dairelerin yanındaki kutucuğu işaretleyin ve aşağıdaki butona basın.")
-        
-        su_borclari = supabase.table("borclar").select("*").eq("odendi", False).eq("tur", "Su").order("daire_kodu").execute().data
-        daireler_map = {d["daire_kodu"]: d["sakin_adi"] for d in supabase.table("daireler").select("daire_kodu, sakin_adi").execute().data}
-        
-        if su_borclari:
-            df_su_borc = pd.DataFrame(su_borclari)
-            df_su_borc['Sec'] = False
-            df_su_borc['Malik / Sakin'] = df_su_borc['daire_kodu'].map(daireler_map)
-            df_su_borc['Dönem'] = df_su_borc['donem'].apply(turkce_donem_adi)
-            df_su_borc['Tutar (TL)'] = df_su_borc['tutar'].apply(para_format)
-            
-            df_su_goster = df_su_borc[['Sec', 'id', 'daire_kodu', 'Malik / Sakin', 'Dönem', 'Tutar (TL)']]
-            df_su_goster.columns = ['Seç', 'ID', 'Daire', 'Malik / Sakin', 'Dönem', 'Tutar (TL)']
-            
-            edited_su_df = st.data_editor(
-                df_su_goster, hide_index=True, use_container_width=True, key="su_tahsil_editor",
-                disabled=["ID", "Daire", "Malik / Sakin", "Dönem", "Tutar (TL)"],
-                column_config={"ID": None}
-            )
-            aciklama_toplu_su = st.text_input("Su Ödeme Açıklaması", value="EFT/Nakit Su Ödemesi", key="su_ack_input")
-            
-            if st.button("Seçilen Su Borçlarını Tahsil Et ve Kasaya İşle"):
-                secilenler_su = edited_su_df[edited_su_df['Seç'] == True]
-                if not secilenler_su.empty:
-                    borc_map_su = {b['id']: b for b in su_borclari}
-                    tahsilat_listesi_su = []
-                    for _, row in secilenler_su.iterrows():
-                        b_item = borc_map_su[row['ID']]
-                        supabase.table("borclar").update({"odendi": True}).eq("id", b_item['id']).execute()
-                        tahsilat_listesi_su.append({
-                            "daire_kodu": b_item["daire_kodu"], "tur": "Su", 
-                            "tutar": b_item["tutar"], "tarih": datetime.now().strftime("%Y-%m-%d"), "aciklama": aciklama_toplu_su
-                        })
-                    if tahsilat_listesi_su:
-                        supabase.table("tahsilat").insert(tahsilat_listesi_su).execute()
-                    st.success(f"Seçilen {len(secilenler_su)} dairenin su ödemesi başarıyla kasaya işlendi!")
-                    st.rerun()
-                else:
-                    st.warning("Lütfen tablodan en az bir daire seçin.")
-        else:
-            st.info("Ödenmemiş bekleyen su borcu bulunmuyor.")
+        borc_tahsil_sekmesi("Su", "su", "EFT/Nakit Su Ödemesi")
 
     with tab4:
         st.subheader("📜 Eski Borç Tahsil Et")
         eski_borclar = supabase.table("borclar").select("*").eq("odendi", False).eq("tur", "Eski Borç").order("daire_kodu").execute().data
-        daireler_map = {d["daire_kodu"]: d["sakin_adi"] for d in supabase.table("daireler").select("daire_kodu, sakin_adi").execute().data}
+        daireler_map = daireler_map_getir()
         
         if eski_borclar:
             secenekler_eski = []
@@ -770,4 +762,5 @@ elif secim == "⚙️ Daire & Muafiyet Ayarları" and yonetici_giris_yapildi:
                 "son_su_endeks": float(row["Son Su Endeksi"]), 
                 "bahce_orani": float(row["Bahçe Oranı"])
             }).eq("daire_kodu", row["Daire"]).execute()
+        daireler_map_getir.clear()
         st.success("Daire bilgileri başarıyla güncellendi!")
