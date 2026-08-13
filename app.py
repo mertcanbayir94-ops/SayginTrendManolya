@@ -426,13 +426,28 @@ elif secim == "📊 Dashboard / Kasa":
         for d_kodu in sorted(daire_borclari.keys()):
             sakin = daireler_map.get(d_kodu, "")
             satirlar.append(f"{d_kodu} {sakin}")
-            for item in daire_borclari[d_kodu]:
-    # Temmuz öncesi / Eski Borç kayıtlarını WhatsApp mesajına dahil etme
-    if item["tur"] == "Eski Borç":
+            for d_kodu in sorted(daire_borclari.keys()):
+
+    # Eski Borçları mesajdan çıkar
+    gosterilecek_borclar = [
+        item for item in daire_borclari[d_kodu]
+        if item["tur"] != "Eski Borç"
+    ]
+
+    # Sadece eski borcu olan daireyi hiç gösterme
+    if not gosterilecek_borclar:
         continue
 
-    ay_adi = str(item["donem"]).split(" ")[0]
-    satirlar.append(
+    sakin = daireler_map.get(d_kodu, "")
+    satirlar.append(f"{d_kodu} {sakin}")
+
+    for item in gosterilecek_borclar:
+        ay_adi = str(item["donem"]).split(" ")[0]
+        satirlar.append(
+            f"{ay_adi} {item['tur']} Borcu {para_format(item['tutar'])}"
+        )
+
+    satirlar.append("")
         f"{ay_adi} {item['tur']} Borcu {para_format(item['tutar'])}"
     )
             satirlar.append("")
