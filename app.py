@@ -382,8 +382,47 @@ elif secim == "📊 Dashboard / Kasa":
     st.markdown("---")
     st.subheader("📱 Bekleyen Borç Hatırlatmaları")
 
-    if bekleyen_borclar and yonetici_giris_yapildi:
-        ... (verdiğim yeni kodun tamamı) ...
+  if bekleyen_borclar and yonetici_giris_yapildi:
+        telefon_map = daireler_telefon_getir()
+
+        daire_borclari = {}
+        for b in bekleyen_borclar:
+            daire_borclari.setdefault(b["daire_kodu"], []).append(b)
+
+        st.caption("Her daire için kişiye özel WhatsApp mesajı hazırlanır, 'Hatırlat' butonuna basınca WhatsApp açılır, sen sadece gönder'e basarsın.")
+
+        for d_kodu in sorted(daire_borclari.keys()):
+            borclar_list = daire_borclari[d_kodu]
+            sakin = daireler_map.get(d_kodu, "")
+            toplam = sum(x["tutar"] for x in borclar_list)
+            detay = ", ".join(f"{x['tur']} ({turkce_donem_adi(x['donem'])}): {para_format(x['tutar'])}" for x in borclar_list)
+            mesaj = (
+                f"Sayın {sakin}, {d_kodu} nolu dairenizin toplam {para_format(toplam)} tutarında "
+                f"ödenmemiş borcu bulunmaktadır. Detay: {detay}. Bilginize rica ederiz."
+            )
+
+            c1, c2 = st.columns([3, 1])
+            with c1:
+                st.write(f"**{d_kodu}** — {sakin}: {para_format(toplam)}")
+            with c2:
+                link = whatsapp_link_olustur(telefon_map.get(d_kodu), mesaj)
+                if link:
+                    st.link_button("📱 Hatırlat", link, use_container_width=True)
+                else:
+                    st.caption("Telefon yok")
+
+        st.markdown("#### 📋 Toplu Hatırlatma Metni (Ortak WhatsApp Grubuna Yapıştırmak İçin)")
+        st.caption("WhatsApp, zaten üye olduğun bir gruba dışarıdan otomatik mesaj göndermeye izin vermiyor — bu yüzden tek tuşla toplu gönderim yapılamıyor. Ama aşağıdaki metni kopyalayıp gruba elle yapıştırman 10 saniye sürer.")
+
+        satirlar = ["📢 *Bekleyen Aidat/Su Borcu Bildirimi*", ""]
+        for d_kodu in sorted(daire_borclari.keys()):
+            sakin = daireler_map.get(d_kodu, "")
+            toplam = sum(x["tutar"] for x in daire_borclari[d_kodu])
+            satirlar.append(f"• {d_kodu} ({sakin}): {para_format(toplam)}")
+        toplu_mesaj = "\n".join(satirlar)
+        st.code(toplu_mesaj, language=None)
+    elif not yonetici_giris_yapildi:
+        st.info("Hatırlatma göndermek için yönetici girişi yapmalısınız.")
     else:
         st.caption("Bekleyen borç olmadığı için hatırlatma gönderilecek bir şey yok.")
 
