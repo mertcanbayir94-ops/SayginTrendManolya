@@ -11,6 +11,10 @@ st.set_page_config(page_title="Manolya Trend Yönetimi", page_icon="🏢", layou
 
 STORAGE_BUCKET = "dekontlar"  # Supabase Storage'da oluşturduğun bucket adı
 
+# Hatırlatma mesajlarında kullanılacak ödeme bilgileri
+IBAN_NO = "TR82 0004 6000 6188 8000 2949 56"
+HESAP_SAHIBI = "Saygın Trend Manolya Sitesi"
+
 # --- SUPABASE BAĞLANTISI ---
 @st.cache_resource
 def init_supabase() -> Client:
@@ -399,9 +403,12 @@ elif secim == "📊 Dashboard / Kasa":
             detay = ", ".join(f"{x['tur']} ({turkce_donem_adi(x['donem'])}): {para_format(x['tutar'])}" for x in borclar_list)
             mesaj = (
                 f"Sayın {sakin}, {d_kodu} nolu dairenizin toplam {para_format(toplam)} tutarında "
-                f"ödenmemiş borcu bulunmaktadır. Detay: {detay}. Bilginize rica ederiz."
+                f"ödenmemiş borcu bulunmaktadır. Detay: {detay}. "
+                f"Ödemenizi aşağıdaki hesaba yapabilirsiniz:\n"
+                f"IBAN: {IBAN_NO}\n"
+                f"Hesap Sahibi: {HESAP_SAHIBI}\n"
+                f"Açıklama kısmına daire numaranızı ({d_kodu}) yazmanızı rica ederiz."
             )
-
             c1, c2 = st.columns([3, 1])
             with c1:
                 st.write(f"**{d_kodu}** — {sakin}: {para_format(toplam)}")
@@ -420,6 +427,10 @@ elif secim == "📊 Dashboard / Kasa":
             sakin = daireler_map.get(d_kodu, "")
             toplam = sum(x["tutar"] for x in daire_borclari[d_kodu])
             satirlar.append(f"• {d_kodu} ({sakin}): {para_format(toplam)}")
+        satirlar.append("")
+        satirlar.append(f"Ödemeleriniz için IBAN: {IBAN_NO}")
+        satirlar.append(f"Hesap Sahibi: {HESAP_SAHIBI}")
+        satirlar.append("Açıklama kısmına daire numaranızı yazmanızı rica ederiz.")
         toplu_mesaj = "\n".join(satirlar)
         st.code(toplu_mesaj, language=None)
     elif not yonetici_giris_yapildi:
