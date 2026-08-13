@@ -424,36 +424,34 @@ elif secim == "📊 Dashboard / Kasa":
 
         satirlar = ["📢 *Bekleyen Aidat/Su Borcu Bildirimi*", ""]
 
-for d_kodu in sorted(daire_borclari.keys()):
-    gosterilecek_borclar = [
-        item
-        for item in daire_borclari[d_kodu]
-        if item["tur"] != "Eski Borç"
-    ]
+        for d_kodu in sorted(daire_borclari.keys()):
+            gosterilecek_borclar = [
+                item
+                for item in daire_borclari[d_kodu]
+                if item["tur"] != "Eski Borç"
+            ]
 
-    if not gosterilecek_borclar:
-        continue
+            if not gosterilecek_borclar:
+                continue
 
-    sakin = daireler_map.get(d_kodu, "")
-    satirlar.append(f"{d_kodu} {sakin}")
+            sakin = daireler_map.get(d_kodu, "")
+            satirlar.append(f"{d_kodu} {sakin}")
 
-    for item in gosterilecek_borclar:
-        ay_adi = str(item["donem"]).split(" ")[0]
-        satirlar.append(
-            f"{ay_adi} {item['tur']} Borcu {para_format(item['tutar'])}"
-        )
+            for item in gosterilecek_borclar:
+                ay_adi = str(item["donem"]).split(" ")[0]
+                satirlar.append(
+                    f"{ay_adi} {item['tur']} Borcu {para_format(item['tutar'])}"
+                )
 
-    satirlar.append("")
+            satirlar.append("")
 
-satirlar.append(f"Ödemeleriniz için IBAN: {IBAN_NO}")
-satirlar.append(f"Hesap Sahibi: {HESAP_SAHIBI}")
-satirlar.append(
-    "Açıklama kısmına daire numaranızı yazmanızı rica ederiz."
-)
+        satirlar.append(f"Ödemeleriniz için IBAN: {IBAN_NO}")
+        satirlar.append(f"Hesap Sahibi: {HESAP_SAHIBI}")
+        satirlar.append("Açıklama kısmına daire numaranızı yazmanızı rica ederiz.")
 
-toplu_mesaj = "\n".join(satirlar)
+        toplu_mesaj = "\n".join(satirlar)
+        st.code(toplu_mesaj, language=None)
 
-    st.code(toplu_mesaj, language=None)
     elif not yonetici_giris_yapildi:
         st.info("Hatırlatma göndermek için yönetici girişi yapmalısınız.")
     else:
