@@ -359,7 +359,8 @@ elif secim == "📊 Dashboard / Kasa":
         st.bar_chart(aylik_ozet, color=["#2ecc71", "#e74c3c"], stack=False)
     else:
         st.info("Henüz grafik oluşturacak kadar tahsilat veya gider kaydı bulunmuyor.")
-        st.markdown("---")
+
+    st.markdown("---")
     st.subheader("📋 Ödenmeyen Borçlar Listesi")
     
     bekleyen_borclar = supabase.table("borclar").select("daire_kodu, tur, tutar, donem").eq("odendi", False).order("daire_kodu").execute().data
@@ -382,7 +383,7 @@ elif secim == "📊 Dashboard / Kasa":
     st.markdown("---")
     st.subheader("📱 Bekleyen Borç Hatırlatmaları")
 
-  if bekleyen_borclar and yonetici_giris_yapildi:
+    if bekleyen_borclar and yonetici_giris_yapildi:
         telefon_map = daireler_telefon_getir()
 
         daire_borclari = {}
@@ -428,6 +429,7 @@ elif secim == "📊 Dashboard / Kasa":
 
     st.markdown("---")
     st.subheader("📥 Excel Raporu")
+    st.caption("Bekleyen borçlar, tüm tahsilatlar ve tüm giderleri tek bir Excel dosyasında (3 ayrı sayfa halinde) indir.")
 
     if yonetici_giris_yapildi:
         tahsilat_rapor = supabase.table("tahsilat").select("*").order("tarih", desc=True).execute().data
@@ -460,7 +462,7 @@ elif secim == "📊 Dashboard / Kasa":
         )
     else:
         st.info("Excel raporu indirmek için yönetici girişi yapmalısınız.")
-
+        
 # --- 3. TAHSİLAT YÖNETİMİ ---
 elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_giris_yapildi:
     st.header("💳 Tahsilat Yönetimi")
