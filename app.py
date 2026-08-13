@@ -427,8 +427,14 @@ elif secim == "📊 Dashboard / Kasa":
             sakin = daireler_map.get(d_kodu, "")
             satirlar.append(f"{d_kodu} {sakin}")
             for item in daire_borclari[d_kodu]:
-                ay_adi = str(item["donem"]).split(" ")[0]
-                satirlar.append(f"{ay_adi} {item['tur']} Borcu {para_format(item['tutar'])}")
+    # Temmuz öncesi / Eski Borç kayıtlarını WhatsApp mesajına dahil etme
+    if item["tur"] == "Eski Borç":
+        continue
+
+    ay_adi = str(item["donem"]).split(" ")[0]
+    satirlar.append(
+        f"{ay_adi} {item['tur']} Borcu {para_format(item['tutar'])}"
+    )
             satirlar.append("")
         satirlar.append(f"Ödemeleriniz için IBAN: {IBAN_NO}")
         satirlar.append(f"Hesap Sahibi: {HESAP_SAHIBI}")
