@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 import re
+from urllib.parse import quote
 from datetime import datetime
 from supabase import create_client, Client
 
@@ -71,7 +72,28 @@ def daireler_map_getir():
     """Daire kodu -> sakin adı eşlemesini kısa süreli önbellekten döndürür."""
     data = supabase.table("daireler").select("daire_kodu, sakin_adi").execute().data or []
     return {d["daire_kodu"]: d["sakin_adi"] for d in data}
+    
+@st.cache_data(ttl=30)
+def daireler_telefon_getir():
+    """Daire kodu -> telefon numarası eşlemesini kısa süreli önbellekten döndürür."""
+    data = supabase.table("daireler").select("daire_kodu, telefon").execute().data or []
+    return {d["daire_kodu"]: d.get("telefon") for d in data}
 
+
+def whatsapp_link_olustur(telefon, mesaj):
+    """Verilen telefon numarası ve mesaj metninden tıklanabilir bir WhatsApp linki üretir.
+    Numara boşsa None döner. Türkiye numaralarını (başında 0 veya hiçbir şey olmadan)
+    otomatik olarak 90 ülke koduyla düzenler."""
+    if not telefon or not str(telefon).strip():
+        return None
+    temiz = re.sub(r"[^0-9]", "", str(telefon))
+    if not temiz:
+        return None
+    if temiz.startswith("0"):
+        temiz = "90" + temiz[1:]
+    elif not temiz.startswith("90"):
+        temiz = "90" + temiz
+    return f"https://wa.me/{temiz}?text={quote(mesaj)}"
 
 def borc_tahsil_sekmesi(borc_turu, key_prefix, varsayilan_aciklama):
     """Aidat/Su gibi aynı akışa sahip borç tahsilat sekmelerini tek yerde yönetir."""
@@ -358,8 +380,15 @@ elif secim == "📊 Dashboard / Kasa":
         st.success("Tüm borçlar ödenmiş, harika!")
 
     st.markdown("---")
+    st.subheader("📱 Bekleyen Borç Hatırlatmaları")
+
+    if bekleyen_borclar and yonetici_giris_yapildi:
+        ... (verdiğim yeni kodun tamamı) ...
+    else:
+        st.caption("Bekleyen borç olmadığı için hatırlatma gönderilecek bir şey yok.")
+
+    st.markdown("---")
     st.subheader("📥 Excel Raporu")
-    st.caption("Bekleyen borçlar, tüm tahsilatlar ve tüm giderleri tek bir Excel dosyasında (3 ayrı sayfa halinde) indir.")
 
     if yonetici_giris_yapildi:
         tahsilat_rapor = supabase.table("tahsilat").select("*").order("tarih", desc=True).execute().data
@@ -747,9 +776,12 @@ elif secim == "💸 Gider Ekle & Dekont Takibi":
 elif secim == "⚙️ Daire & Muafiyet Ayarları" and yonetici_giris_yapildi:
     st.header("Daire, Sakin Bilgileri ve Bahçe Oranları")
     
-    daireler_data = supabase.table("daireler").select("*").order("daire_kodu").execute().data
+    daireler_data = supabase.table("daireler").select(
+        "daire_kodu, sakin_adi, aidat_tutari, aidat_muaf, son_su_endeks, bahce_orani, telefon"
+    ).order("daire_kodu").execute().data
     df_daireler = pd.DataFrame(daireler_data)
-    df_daireler.columns = ['Daire', 'Sakin Adı', 'Sabit Aidat (TL)', 'Aidattan Muaf Mı?', 'Son Su Endeksi', 'Bahçe Oranı']
+    df_daireler.columns = ['Daire', 'Sakin Adı', 'Sabit Aidat (TL)', 'Aidattan Muaf Mı?', 'Son Su Endeksi', 'Bahçe Oranı', 'Telefon']
+    st.caption("Telefon alanına WhatsApp'ta kayıtlı numarayı gir (örn. 0532 123 45 67 ya da 5321234567) — hatırlatma linkleri bu numaraya göre oluşturulur.")
 
     edited_daireler = st.data_editor(df_daireler, use_container_width=True, key="daire_ayarlar_editor")
     
@@ -760,7 +792,9 @@ elif secim == "⚙️ Daire & Muafiyet Ayarları" and yonetici_giris_yapildi:
                 "aidat_tutari": float(row["Sabit Aidat (TL)"]), 
                 "aidat_muaf": bool(row["Aidattan Muaf Mı?"]), 
                 "son_su_endeks": float(row["Son Su Endeksi"]), 
-                "bahce_orani": float(row["Bahçe Oranı"])
+                "bahce_orani": float(row["Bahçe Oranı"]),
+                "telefon": row["Telefon"] if str(row["Telefon"]).strip() else None
             }).eq("daire_kodu", row["Daire"]).execute()
         daireler_map_getir.clear()
+        daireler_telefon_getir.clear()
         st.success("Daire bilgileri başarıyla güncellendi!")
