@@ -453,7 +453,7 @@ satirlar.append(
 
 toplu_mesaj = "\n".join(satirlar)
 
-st.code(toplu_mesaj, language=None)
+    st.code(toplu_mesaj, language=None)
     elif not yonetici_giris_yapildi:
         st.info("Hatırlatma göndermek için yönetici girişi yapmalısınız.")
     else:
