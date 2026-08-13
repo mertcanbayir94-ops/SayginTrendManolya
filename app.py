@@ -423,18 +423,14 @@ elif secim == "📊 Dashboard / Kasa":
         st.caption("WhatsApp, zaten üye olduğun bir gruba dışarıdan otomatik mesaj göndermeye izin vermiyor — bu yüzden tek tuşla toplu gönderim yapılamıyor. Ama aşağıdaki metni kopyalayıp gruba elle yapıştırman 10 saniye sürer.")
 
         satirlar = ["📢 *Bekleyen Aidat/Su Borcu Bildirimi*", ""]
-        for d_kodu in sorted(daire_borclari.keys()):
-            sakin = daireler_map.get(d_kodu, "")
-            satirlar.append(f"{d_kodu} {sakin}")
-            for d_kodu in sorted(daire_borclari.keys()):
 
-    # Eski Borçları mesajdan çıkar
+for d_kodu in sorted(daire_borclari.keys()):
     gosterilecek_borclar = [
-        item for item in daire_borclari[d_kodu]
+        item
+        for item in daire_borclari[d_kodu]
         if item["tur"] != "Eski Borç"
     ]
 
-    # Sadece eski borcu olan daireyi hiç gösterme
     if not gosterilecek_borclar:
         continue
 
@@ -448,14 +444,16 @@ elif secim == "📊 Dashboard / Kasa":
         )
 
     satirlar.append("")
-        f"{ay_adi} {item['tur']} Borcu {para_format(item['tutar'])}"
-    )
-            satirlar.append("")
-        satirlar.append(f"Ödemeleriniz için IBAN: {IBAN_NO}")
-        satirlar.append(f"Hesap Sahibi: {HESAP_SAHIBI}")
-        satirlar.append("Açıklama kısmına daire numaranızı yazmanızı rica ederiz.")
-        toplu_mesaj = "\n".join(satirlar)
-        st.code(toplu_mesaj, language=None)
+
+satirlar.append(f"Ödemeleriniz için IBAN: {IBAN_NO}")
+satirlar.append(f"Hesap Sahibi: {HESAP_SAHIBI}")
+satirlar.append(
+    "Açıklama kısmına daire numaranızı yazmanızı rica ederiz."
+)
+
+toplu_mesaj = "\n".join(satirlar)
+
+st.code(toplu_mesaj, language=None)
     elif not yonetici_giris_yapildi:
         st.info("Hatırlatma göndermek için yönetici girişi yapmalısınız.")
     else:
