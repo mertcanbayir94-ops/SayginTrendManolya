@@ -540,19 +540,41 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
             secenekler_eski = []
             for b in eski_borclar:
                 sakin = daireler_map.get(b["daire_kodu"], "")
-                secenekler_eski.append((b["id"], f"{b['daire_kodu']} ({sakin}) - {para_format(b['tutar'])}"))
+                secenekler_eski.append((b["id"], f"{b['daire_kodu']} ({sakin}) - Kalan: {para_format(b['tutar'])}"))
             
             secilen_id_eski = st.selectbox("Ödeme Yapan Daire", options=[s[0] for s in secenekler_eski], format_func=lambda x: [s[1] for s in secenekler_eski if s[0] == x][0])
+            borc_item_onizleme = [b for b in eski_borclar if b["id"] == secilen_id_eski][0]
+            kalan_borc_onizleme = float(borc_item_onizleme["tutar"])
+
+            odenen_tutar = st.number_input(
+                "Tahsil Edilen Tutar (TL)",
+                min_value=0.01,
+                max_value=kalan_borc_onizleme,
+                value=kalan_borc_onizleme,
+                step=50.0,
+                help="Borcun tamamı kadar girersen borç tamamen kapanır. Daha az girersen, sadece o kadarı düşülür, kalan tutar borç olarak sistemde kalmaya devam eder (kısmi ödeme)."
+            )
             aciklama_eski = st.text_input("Açıklama", value="Temmuz Öncesi Eski Borç Ödemesi")
             
             if st.button("Eski Borç Ödemesini Kasaya Kaydet"):
                 borc_item = [b for b in eski_borclar if b["id"] == secilen_id_eski][0]
-                supabase.table("borclar").update({"odendi": True}).eq("id", secilen_id_eski).execute()
+                kalan_borc = float(borc_item["tutar"])
+
+                if odenen_tutar + 0.01 >= kalan_borc:
+                    supabase.table("borclar").update({"odendi": True}).eq("id", secilen_id_eski).execute()
+                    kaydedilecek_tutar = kalan_borc
+                    mesaj = "Eski borç tamamen kapatıldı ve kasaya işlendi!"
+                else:
+                    yeni_kalan = kalan_borc - odenen_tutar
+                    supabase.table("borclar").update({"tutar": yeni_kalan}).eq("id", secilen_id_eski).execute()
+                    kaydedilecek_tutar = odenen_tutar
+                    mesaj = f"Kısmi ödeme kasaya işlendi! Kalan borç: {para_format(yeni_kalan)}"
+
                 supabase.table("tahsilat").insert({
                     "daire_kodu": borc_item["daire_kodu"], "tur": "Eski Borç", 
-                    "tutar": borc_item["tutar"], "tarih": datetime.now().strftime("%Y-%m-%d"), "aciklama": aciklama_eski
+                    "tutar": kaydedilecek_tutar, "tarih": datetime.now().strftime("%Y-%m-%d"), "aciklama": aciklama_eski
                 }).execute()
-                st.success("Eski borç tahsilatı kasaya işlendi!")
+                st.success(mesaj)
                 st.rerun()
         else:
             st.info("Ödenmemiş eski borç bulunmuyor.")
