@@ -43,32 +43,71 @@ TURKCE_AYLAR = {
     "September": "Eylül", "October": "Ekim", "November": "Kasım", "December": "Aralık"
 }
 
-def turkce_donem_adi(ingilizce_donem):
-    for ing, tr in TURKCE_AYLAR.items():
-        ingilizce_donem = str(ingilizce_donem).replace(ing, tr)
-    return ingilizce_donem
+def turkce_upper(metin):
+    """Python'un standart .upper() metodu Türkçe 'i' harfini yanlış büyütür
+    (örn. 'eski'.upper() -> 'ESKI', oysa doğrusu 'ESKİ' olmalı). Bu fonksiyon
+    önce i/ı harflerini doğru noktalı/noktasız büyük karşılıklarına çevirip
+    sonra büyütüyor, böylece arama/karşılaştırmalar doğru çalışıyor."""
+    return metin.replace("i", "İ").replace("ı", "I").upper()
 
 # Açıklama metninden daire kodunu ve borç türünü çıkaran akıllı fonksiyon
-def aciklama_analiz_et(aciklama):
+def aciklama_analiz_et(aciklama, sakin_isim_map=None):
+    """Açıklama metninden daire kodu ve borç türünü tahmin etmeye çalışır.
+    Sırasıyla dener:
+      1) Kısa kod: 'A-1', 'B3', 'C - 4' gibi
+      2) Uzun kalıp: 'F BLOK DAİRE 6', 'F BLOK D.6' gibi
+      3) (sakin_isim_map verilmişse) açıklamadaki isim, sistemdeki bir
+         sakinin adıyla en az 2 kelime örtüşüyorsa, o dairenin kodu
+         ZAYIF bir tahmin olarak döndürülür (çağıran taraf bunu otomatik
+         işaretlemeden, admin onayına sunmalı).
+    Hiçbiri bulunamazsa daire_kodu=None döner; admin elle seçer."""
     if not isinstance(aciklama, str):
-        return None, "Aidat"
-    
-    aciklama_upper = aciklama.upper()
-    
-    # Daire kodunu bul (Örn: A-1, B3, C-4, G-2 vb.)
-    daire_match = re.search(r'\b([A-G])\s*[-]?\s*([1-8])\b', aciklama_upper)
+        return None, "Aidat", False
+
+    aciklama_upper = turkce_upper(aciklama)
     daire_kodu = None
-    if daire_match:
-        daire_kodu = f"{daire_match.group(1)}-{daire_match.group(2)}"
-        
+    guvenilir = False
+
+    # 1) Kısa kod: A-1, B3, C - 4 ...
+    kisa_match = re.search(r'\b([A-G])\s*[-]?\s*([1-8])\b', aciklama_upper)
+    if kisa_match:
+        daire_kodu = f"{kisa_match.group(1)}-{kisa_match.group(2)}"
+        guvenilir = True
+
+    # 2) Uzun kalıp: F BLOK DAİRE 6 / F BLOK D.6 / F BLOKU 6
+    if not daire_kodu:
+        uzun_match = re.search(r'\b([A-G])\s*BLOK[U]?\s*(?:DAİRE|DAIRE|D)?\.?\s*([1-8])\b', aciklama_upper)
+        if uzun_match:
+            daire_kodu = f"{uzun_match.group(1)}-{uzun_match.group(2)}"
+            guvenilir = True
+
+    # 3) İsim eşleştirme (zayıf tahmin)
+    if not daire_kodu and sakin_isim_map:
+        durak_kelimeler = {"HANIM", "BEY", "VE"}
+        en_iyi_kod, en_iyi_puan = None, 0
+        for kod, isim in sakin_isim_map.items():
+            if not isim:
+                continue
+            kelimeler = [k for k in re.split(r'[\s/\-]+', turkce_upper(isim)) if len(k) >= 3 and k not in durak_kelimeler]
+            if not kelimeler:
+                continue
+            eslesen = sum(1 for k in kelimeler if re.search(rf'\b{re.escape(k)}\b', aciklama_upper))
+            gereken = 2 if len(kelimeler) >= 2 else 1
+            if eslesen >= gereken and eslesen > en_iyi_puan:
+                en_iyi_puan = eslesen
+                en_iyi_kod = kod
+        if en_iyi_kod:
+            daire_kodu = en_iyi_kod
+            guvenilir = False
+
     # Borç türünü tahmin et
     borc_turu = "Aidat"
     if "SU" in aciklama_upper:
         borc_turu = "Su"
     elif "ESKİ" in aciklama_upper or "GEÇMİŞ" in aciklama_upper:
         borc_turu = "Eski Borç"
-        
-    return daire_kodu, borc_turu
+
+    return daire_kodu, borc_turu, guvenilir
 
 
 @st.cache_data(ttl=30)
@@ -604,6 +643,7 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                 st.success(f"Sütunlar başarıyla eşleşti -> Tarih: `{tarih_kolonu}`, Açıklama: `{aciklama_kolonu}`, Tutar: `{tutar_kolonu}`")
                 if st.button("Ekstreyi Analiz Et ve Eşleştir"):
                     islenen_satirlar = []
+                    sakin_isim_map = daireler_map_getir()
                     
                     for idx, row in df_ekstre.iterrows():
                         aciklama_metni = str(row[aciklama_kolonu])
@@ -621,23 +661,26 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                         if temiz_tutar <= 0:
                             continue # Giden paraları veya 0 tutarları atla
                             
-                        daire_kodu, tahmin_turu = aciklama_analiz_et(aciklama_metni)
+                        daire_kodu, tahmin_turu, guvenilir = aciklama_analiz_et(aciklama_metni, sakin_isim_map)
                         
-                        if daire_kodu:
-                            islenen_satirlar.append({
-                                "Seç": True,
-                                "Index": idx,
-                                "Tarih": str(row[tarih_kolonu])[:10],
-                                "Daire": daire_kodu,
-                                "Tür": tahmin_turu,
-                                "Tutar": temiz_tutar,
-                                "Açıklama": aciklama_metni
-                            })
+                        islenen_satirlar.append({
+                            "Seç": guvenilir,
+                            "Index": idx,
+                            "Tarih": str(row[tarih_kolonu])[:10],
+                            "Daire": daire_kodu if daire_kodu else "",
+                            "Tür": tahmin_turu,
+                            "Tutar": temiz_tutar,
+                            "Açıklama": aciklama_metni
+                        })
                             
                     if islenen_satirlar:
                         st.session_state["islenen_ekstre_df"] = pd.DataFrame(islenen_satirlar)
+                        net_sayisi = sum(1 for s in islenen_satirlar if s["Seç"])
+                        zayif_sayisi = sum(1 for s in islenen_satirlar if s["Daire"] and not s["Seç"])
+                        bos_sayisi = sum(1 for s in islenen_satirlar if not s["Daire"])
+                        st.info(f"{len(islenen_satirlar)} gelen para hareketi bulundu — {net_sayisi} net eşleşme (otomatik işaretli), {zayif_sayisi} isimden tahmin (kontrol et), {bos_sayisi} eşleşmedi (elle seç).")
                     else:
-                        st.warning("Ekstrede hiçbir daire kodu (Örn: A-1, B-2) yakalanamadı. Lütfen açıklama sütununu kontrol edin.")
+                        st.info("Bu ekstrede işlenecek gelen para hareketi bulunamadı (hepsi 0 veya negatif tutarlı).")
                         
             except Exception as e:
                 st.error(f"Dosya okunurken bir hata oluştu: {e}")
@@ -657,6 +700,18 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                 }
             )
             
+                            st.session_state["islenen_ekstre_df"],
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Seç": st.column_config.CheckboxColumn("İşle?"),
+                    "Daire": st.column_config.SelectboxColumn("Daire", options=[""] + sorted(daireler_map_getir().keys())),
+                    "Tür": st.column_config.SelectboxColumn("Borç Türü", options=["Aidat", "Su", "Eski Borç"]),
+                    "Tutar": st.column_config.NumberColumn("Tutar (TL)", format="%.2f ₺")
+                }
+            )
+            st.caption("💡 'Daire' boş olan satırlar sistem tarafından eşleştirilemedi — açıklamaya bakıp doğru daireyi elle seçebilir, sonra 'İşle?' kutucuğunu işaretleyebilirsin.")
+            
             if st.button("✅ Seçilen Ekstre Hareketlerini Borçlardan Düş ve Kasaya İşle"):
                 secilen_islem_satirlari = edited_ekstre_islem[edited_ekstre_islem["Seç"] == True]
                 
@@ -665,6 +720,7 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                     kismi_odeme_listesi = []
                     eslesmeyen_listesi = []
                     mukerrer_listesi = []
+                    daire_secilmemis_listesi = []
                     
                     for _, row in secilen_islem_satirlari.iterrows():
                         d_kodu = row["Daire"]
@@ -673,6 +729,10 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                         tarih = row["Tarih"]
                         tarih_norm = tarih if len(str(tarih)) == 10 else datetime.now().strftime("%Y-%m-%d")
                         ack = row["Açıklama"]
+
+                        if not d_kodu:
+                            daire_secilmemis_listesi.append(f"{tarih_norm} - {para_format(tutar)} - {str(ack)[:50]}")
+                            continue
 
                         # Mükerrer işlem kontrolü: aynı daire+tür+tarih+tutar zaten kasaya işlenmiş mi?
                         mukerrer_kontrol = supabase.table("tahsilat").select("id") \
@@ -721,6 +781,8 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                         st.warning("⚠️ Kısmi ödemeler (borç kapatılmadı, kontrol et):\n\n" + "\n".join(f"- {x}" for x in kismi_odeme_listesi))
                     if eslesmeyen_listesi:
                         st.warning("⚠️ Bu işlemler için açık borç bulunamadı, tahsilat kaydedilmedi (elle kontrol et):\n\n" + "\n".join(f"- {x}" for x in eslesmeyen_listesi))
+                    if daire_secilmemis_listesi:
+                        st.warning("⚠️ Daire seçilmediği için atlandı (tabloya dönüp 'Daire' seçip tekrar dene):\n\n" + "\n".join(f"- {x}" for x in daire_secilmemis_listesi))
                     if mukerrer_listesi:
                         st.info("ℹ️ Şu işlemler daha önce zaten kasaya işlenmişti, tekrar eklenmedi:\n\n" + "\n".join(f"- {x}" for x in mukerrer_listesi))
 
