@@ -700,7 +700,7 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                 }
             )
             
-                            st.session_state["islenen_ekstre_df"],
+                st.session_state["islenen_ekstre_df"],
                 use_container_width=True,
                 hide_index=True,
                 column_config={
