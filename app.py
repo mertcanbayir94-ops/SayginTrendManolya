@@ -638,44 +638,42 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                 if ekstre_dosya.name.endswith('.csv'):
                     df_ekstre = pd.read_csv(ekstre_dosya)
                 else:
-                    df_ekstre = pd.read_excel(ekstre_dosya)
+                    df_ekstre = pd.read_excel(ekstre_dosya, skiprows=1) # Akbank excel başlık satırı için 1 satır atla
                 
                 st.markdown("### 📄 Yüklenen Ekstre Önizlemesi (Ham Veri)")
                 st.dataframe(df_ekstre.head(5), use_container_width=True)
                 
-                # Sütun isimleri esnekliği için arama
-                kolonlar = df_ekstre.columns.tolist()
-                aciklama_kolonu = next((c for c in kolonlar if "açıklama" in c.lower() or "detay" in c.lower() or "aciklama" in c.lower()), kolonlar[1] if len(kolonlar) > 1 else kolonlar[0])
-                tutar_kolonu = next((c for c in kolonlar if "tutar" in c.lower() or "alacak" in c.lower() or "tutar(tl)" in c.lower()), kolonlar[-1])
-                tarih_kolonu = next((c for c in kolonlar if "tarih" in c.lower()), kolonlar[0])
-                
-                st.success(f"Sütunlar başarıyla eşleşti -> Tarih: `{tarih_kolonu}`, Açıklama: `{aciklama_kolonu}`, Tutar: `{tutar_kolonu}`")
                 if st.button("Ekstreyi Analiz Et ve Eşleştir"):
                     islenen_satirlar = []
                     sakin_isim_map = daireler_map_getir()
                     
                     for idx, row in df_ekstre.iterrows():
-                        aciklama_metni = str(row[aciklama_kolonu])
-                        
-                        # Tutarı temizle ve sayıya çevir
-                        ham_tutar = row[tutar_kolonu]
+                        # Akbank formatı: 0:Tarih, 1:Saat, 2:Tutar, 3:Bakiye, 4:Borç/Alacak, 5:Açıklama, 6:Fiş/Dekont No
                         try:
+                            borc_alacak = str(row.iloc[4]).strip().upper()
+                            if borc_alacak != 'A':
+                                continue  # Sadece Alacak (Gelen Para / Tahsilat) hareketlerini al
+                            
+                            tarih_val = str(row.iloc[0])[:10]
+                            ham_tutar = row.iloc[2]
                             if isinstance(ham_tutar, str):
                                 temiz_tutar = float(ham_tutar.replace(".", "").replace(",", ".").replace("TL", "").strip())
                             else:
                                 temiz_tutar = float(ham_tutar)
-                        except:
-                            temiz_tutar = 0.0
-                            
-                        if temiz_tutar <= 0:
-                            continue # Giden paraları veya 0 tutarları atla
+                                
+                            if temiz_tutar <= 0:
+                                continue
+                                
+                            aciklama_metni = str(row.iloc[5])
+                        except Exception:
+                            continue
                             
                         daire_kodu, tahmin_turu, guvenilir = aciklama_analiz_et(aciklama_metni, sakin_isim_map)
                         
                         islenen_satirlar.append({
                             "Seç": guvenilir,
                             "Index": idx,
-                            "Tarih": str(row[tarih_kolonu])[:10],
+                            "Tarih": tarih_val,
                             "Daire": daire_kodu if daire_kodu else "",
                             "Tür": tahmin_turu,
                             "Tutar": temiz_tutar,
@@ -689,7 +687,7 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                         bos_sayisi = sum(1 for s in islenen_satirlar if not s["Daire"])
                         st.info(f"{len(islenen_satirlar)} gelen para hareketi bulundu — {net_sayisi} net eşleşme (otomatik işaretli), {zayif_sayisi} isimden tahmin (kontrol et), {bos_sayisi} eşleşmedi (elle seç).")
                     else:
-                        st.info("Bu ekstrede işlenecek gelen para hareketi bulunamadı (hepsi 0 veya negatif tutarlı).")
+                        st.info("Bu ekstrede işlenecek uygun gelen para (Alacak) hareketi bulunamadı.")
                         
             except Exception as e:
                 st.error(f"Dosya okunurken bir hata oluştu: {e}")
