@@ -701,9 +701,9 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
             )
             
             st.session_state["islenen_ekstre_df"],
-                use_container_width=True,
-                hide_index=True,
-                column_config={
+            use_container_width=True,
+            hide_index=True,
+            column_config={
                     "Seç": st.column_config.CheckboxColumn("İşle?"),
                     "Daire": st.column_config.SelectboxColumn("Daire", options=[""] + sorted(daireler_map_getir().keys())),
                     "Tür": st.column_config.SelectboxColumn("Borç Türü", options=["Aidat", "Su", "Eski Borç"]),
