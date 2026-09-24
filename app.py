@@ -709,7 +709,7 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                     "Tür": st.column_config.SelectboxColumn("Borç Türü", options=["Aidat", "Su", "Eski Borç"]),
                     "Tutar": st.column_config.NumberColumn("Tutar (TL)", format="%.2f ₺")
                 }
-            )
+            
             st.caption("💡 'Daire' boş olan satırlar sistem tarafından eşleştirilemedi — açıklamaya bakıp doğru daireyi elle seçebilir, sonra 'İşle?' kutucuğunu işaretleyebilirsin.")
             
             if st.button("✅ Seçilen Ekstre Hareketlerini Borçlardan Düş ve Kasaya İşle"):
