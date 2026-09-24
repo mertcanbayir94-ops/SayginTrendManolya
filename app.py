@@ -43,6 +43,15 @@ TURKCE_AYLAR = {
     "September": "Eylül", "October": "Ekim", "November": "Kasım", "December": "Aralık"
 }
 
+def turkce_donem_adi(ingilizce_donem):
+    """'January 2026' gibi gelen İngilizce dönemi 'Ocak 2026' yapar."""
+    if not isinstance(ingilizce_donem, str):
+        return str(ingilizce_donem)
+    for eng, tr in TURKCE_AYLAR.items():
+        if eng in ingilizce_donem:
+            return ingilizce_donem.replace(eng, tr)
+    return ingilizce_donem
+
 def turkce_upper(metin):
     """Python'un standart .upper() metodu Türkçe 'i' harfini yanlış büyütür
     (örn. 'eski'.upper() -> 'ESKI', oysa doğrusu 'ESKİ' olmalı). Bu fonksiyon
@@ -695,20 +704,11 @@ elif secim == "💳 Tahsilat Yönetimi (Aidat / Su / Eski Borç)" and yonetici_g
                 hide_index=True,
                 column_config={
                     "Seç": st.column_config.CheckboxColumn("İşle?"),
-                    "Tür": st.column_config.SelectboxColumn("Borç Türü", options=["Aidat", "Su", "Eski Borç"]),
-                    "Tutar": st.column_config.NumberColumn("Tutar (TL)", format="%.2f ₺")
-                }
-            )
-            
-            st.session_state["islenen_ekstre_df"],
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                    "Seç": st.column_config.CheckboxColumn("İşle?"),
                     "Daire": st.column_config.SelectboxColumn("Daire", options=[""] + sorted(daireler_map_getir().keys())),
                     "Tür": st.column_config.SelectboxColumn("Borç Türü", options=["Aidat", "Su", "Eski Borç"]),
                     "Tutar": st.column_config.NumberColumn("Tutar (TL)", format="%.2f ₺")
                 }
+            )
             
             st.caption("💡 'Daire' boş olan satırlar sistem tarafından eşleştirilemedi — açıklamaya bakıp doğru daireyi elle seçebilir, sonra 'İşle?' kutucuğunu işaretleyebilirsin.")
             
