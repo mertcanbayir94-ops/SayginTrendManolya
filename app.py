@@ -386,6 +386,34 @@ elif secim == "📊 Dashboard / Kasa":
     col3.metric("📉 Toplam Gider", para_format(toplam_gider))
     col4.metric("⚠️ Bekleyen Toplam Alacak", para_format(toplam_alacak))
 
+    # Kasa Dengeleme (68,558.74 TL Yapma) Butonu
+    if yonetici_giris_yapildi:
+        hedef_bakiye = 68558.74
+        fark_bakiye = hedef_bakiye - kasa
+        if abs(fark_bakiye) > 0.01:
+            st.info(f"💡 Mevcut kasanız {para_format(kasa)}. Hedeflenen bakiye ({para_format(hedef_bakiye)}) ile aranızda {para_format(fark_bakiye)} fark bulunuyor.")
+            if st.button("⚖️ Kasa Bakiyesini 68.558,74 ₺ Yap (Dengeleme Kaydı Ekle)"):
+                if fark_bakiye > 0:
+                    # Gelir / Tahsilat ekle
+                    supabase.table("tahsilat").insert({
+                        "daire_kodu": "A-1",
+                        "tur": "Eski Borç",
+                        "tutar": fark_bakiye,
+                        "tarih": datetime.now().strftime("%Y-%m-%d"),
+                        "aciklama": "Kasa Dengeleme / Açılış Bakiyesi"
+                    }).execute()
+                else:
+                    # Gider ekle
+                    supabase.table("giderler").insert({
+                        "kategori": "Diğer",
+                        "tutar": abs(fark_bakiye),
+                        "tarih": datetime.now().strftime("%Y-%m-%d"),
+                        "aciklama": "Kasa Dengeleme Düzeltmesi",
+                        "dekont_yolu": None
+                    }).execute()
+                st.success("Kasa bakiyesi başarıyla 68.558,74 ₺ olarak eşitlendi!")
+                st.rerun()
+
     st.markdown("---")
     st.subheader("📊 Aylık Gelir / Gider Trendi")
 
